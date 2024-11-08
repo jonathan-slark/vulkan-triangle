@@ -1,19 +1,19 @@
 .POSIX:
 
 CC      = gcc
-CFLAGS  = -ansi -Wall -Wextra -g
-LDFLAGS = -municode
-SRC     = win32.c
+CFLAGS  = -I/mingw64/include -Wall -Wextra -g
+LDFLAGS = -L/mingw64/lib -municode -mwindows -lvulkan-1.dll
+SRC     = win32.c vulkan_instance.c
 OBJ     = $(SRC:.c=.o)
-BIN     = vulkan.exe
+BIN     = vulkan_test.exe
 
 all:	$(BIN)
 
 %.o:	%.c
-	@$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BIN): $(OBJ)
-	@$(CC) $(LDFLAGS) $(OBJ) -o $(BIN)
+	$(CC) $(OBJ) -o $(BIN) $(LDFLAGS)
 
 clean:
 	@rm -f $(OBJ) $(BIN)
