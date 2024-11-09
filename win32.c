@@ -5,7 +5,7 @@
 #include <windows.h>
 #include "vulkan_instance.h"
 
-#define UNUSED(x) (void)(x)
+#define UNUSED(x) (void) (x)
 
 #define CLASSNAME L"Vulkan Test Window Class"
 #define TITLE     L"Vulkan Test"
@@ -48,7 +48,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	return 0;
     }
 
-    // Initialise vulkan
+    // Initialise Vulkan
     initVulkan();
 
     // Show the window
@@ -61,6 +61,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	TranslateMessage(&msg);
 	DispatchMessage(&msg);
     }
+
+    // Terminate Vulkan
+    termVulkan();
 
     return 0;
 }
