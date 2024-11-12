@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <windows.h>
+#include "util.h"
 #include "vulkan_instance.h"
 
 #define UNUSED(x) (void) (x)

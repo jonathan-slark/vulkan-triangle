@@ -1,10 +1,9 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <vulkan/vulkan.h>
+#include "util.h"
 #include "vulkan_device.h"
 #include "vulkan_instance.h"
-
-#define UNUSED(x) (void) (x)
 
 VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 

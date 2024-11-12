@@ -1,8 +1,8 @@
-.POSIX:
-
-CC      = gcc
-CFLAGS  = -I/mingw64/include -Wall -Wextra -g -DDEBUG
-LDFLAGS = -L/mingw64/lib -municode -mwindows -lvulkan-1
+CC       = gcc
+CFLAGS   = -I/mingw64/include -Wall -Wextra -g -DDEBUG
+LDFLAGS  = -L/mingw64/lib -municode -mwindows -lvulkan-1
+DEPFLAGS = -MM
+DEPFILE  = .dep
 
 BIN = vulkan_test.exe
 SRC = vulkan_debug.c vulkan_device.c vulkan_instance.c win32.c
@@ -13,17 +13,16 @@ all: ${BIN}
 ${BIN}: ${OBJ}
 	${CC} -o $@ ${OBJ} ${LDFLAGS}
 
-%.o: %.c Makefile
+%.o: %.c Makefile ${DEPFILE}
 	${CC} -c ${CFLAGS} $<
 
-vulkan_debug.o:    vulkan_debug.c vulkan_debug.h
-vulkan_device.o:   vulkan_device.c vulkan_device.h vulkan_instance.h
-vulkan_instance.o: vulkan_instance.c vulkan_debug.h vulkan_device.h \
-                   vulkan_instance.h
-win32.o:           win32.c vulkan_instance.h
+${DEPFILE}: ${SRC}
+	${CC} ${DEPFLAGS} ${SRC} > $@
+
+include ${DEPFILE}
 
 clean:
-	@rm -f ${BIN} ${OBJ}
+	@rm -f ${BIN} ${OBJ} ${DEPFILE}
 
 run:	${BIN}
 	@./${BIN}
