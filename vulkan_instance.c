@@ -1,27 +1,25 @@
 #include <assert.h>
-#include <stdbool.h>
-#include <string.h>
 #include <vulkan/vulkan.h>
+#include "vulkan_debug.h"
+#include "vulkan_device.h"
 #include "vulkan_instance.h"
 
-#define APPNAME         "Vulkan Test"
-#define APPVER          VK_MAKE_VERSION(1, 0, 0)
-#define VALIDATIONLAYER "VK_LAYER_KHRONOS_validation"
+#define APPNAME "Vulkan Test"
+#define APPVER  VK_MAKE_VERSION(1, 0, 0)
 
-static const char *layers[] = { VALIDATIONLAYER };
-// TODO: Debug log
+const char *validationlayers[] = { VALIDATIONLAYER };
 
-static VkInstance instance;
+VkInstance instance;
 
-static void createInstance();
-static void destroyInstance();
-static bool checkValidationLayerSupport();
+void createInstance();
+void destroyInstance();
 
 void initVulkan() {
 #ifdef DEBUG
     assert(checkValidationLayerSupport());
 #endif // DEBUG
     createInstance();
+    pickPhysicalDevice();
 }
 
 void termVulkan() {
@@ -40,7 +38,7 @@ void createInstance() {
     createInfo.pApplicationInfo = &appInfo;
 #ifdef DEBUG
     createInfo.enabledLayerCount = 1;
-    createInfo.ppEnabledLayerNames = layers;
+    createInfo.ppEnabledLayerNames = validationlayers;
 #endif // DEBUG
 
     assert(vkCreateInstance(&createInfo, NULL, &instance) == VK_SUCCESS);
@@ -48,20 +46,4 @@ void createInstance() {
 
 void destroyInstance() {
     vkDestroyInstance(instance, NULL);
-}
-
-bool checkValidationLayerSupport() {
-    uint32_t layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, NULL);
-    assert(layerCount > 0);
-
-    VkLayerProperties layersAvailable[layerCount];
-    vkEnumerateInstanceLayerProperties(&layerCount, layersAvailable);
-
-    for(uint32_t i = 0; i < layerCount; i++) {
-	if(strcmp(layersAvailable[i].layerName, VALIDATIONLAYER) == 0 ) {
-	    return true;
-	}
-    }
-    return false;
 }

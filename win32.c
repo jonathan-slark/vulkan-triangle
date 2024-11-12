@@ -2,6 +2,7 @@
 #define UNICODE
 #endif 
 
+#include <assert.h>
 #include <windows.h>
 #include "vulkan_instance.h"
 
@@ -43,10 +44,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	    hInstance,  // Instance handle 
 	    NULL        // Additional application data 
 	    );
-    if (hwnd == NULL)
-    {
-	return 0;
-    }
+    assert(hwnd != NULL);
 
     // Initialise Vulkan
     initVulkan();
@@ -73,6 +71,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     switch (uMsg)
     {
 	case WM_DESTROY:
+	    // Request to quit
 	    PostQuitMessage(0);
 	    return 0;
 
@@ -84,5 +83,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	    return 0;
 
     }
+
+    // If we don't handle the message, use the default handler
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
