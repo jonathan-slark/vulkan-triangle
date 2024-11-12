@@ -1,13 +1,18 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <vulkan/vulkan.h>
-#include "util.h"
 #include "vulkan_device.h"
 #include "vulkan_instance.h"
 
 VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 
+struct QueueFamilyIndices {
+    uint32_t graphicsFamily;
+    bool isComplete;
+};
+
 bool isDeviceSuitable(VkPhysicalDevice device);
+struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 
 void pickPhysicalDevice() {
     uint32_t deviceCount;
@@ -28,7 +33,27 @@ void pickPhysicalDevice() {
 }
 
 bool isDeviceSuitable(VkPhysicalDevice device) {
-    UNUSED(device);
+    struct QueueFamilyIndices indices = findQueueFamilies(device);
 
-    return true;
+    return indices.isComplete;
+}
+
+struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
+    struct QueueFamilyIndices indices;
+
+    uint32_t queueFamilyCount;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
+
+    VkQueueFamilyProperties queueFamilies[queueFamilyCount];
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies);
+
+    for (uint32_t i = 0; i < queueFamilyCount; i++) {
+	if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+	    indices.graphicsFamily = i;
+	    indices.isComplete = true;
+	    break;
+	}
+    }
+
+    return indices;
 }

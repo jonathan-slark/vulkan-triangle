@@ -1,30 +1,34 @@
 CC       = gcc
 CFLAGS   = -I/mingw64/include -Wall -Wextra -g -DDEBUG
 LDFLAGS  = -L/mingw64/lib -municode -mwindows -lvulkan-1
-DEPFLAGS = -MM
-DEPFILE  = .dep
+DEPFLAGS = -MMD -MP -MT $@ -MF $(DEPDIR)/$*.d
+DEPDIR   = .dep
 
 BIN = vulkan_test.exe
 SRC = vulkan_debug.c vulkan_device.c vulkan_instance.c win32.c
-OBJ = ${SRC:.c=.o}
+OBJ = $(SRC:.c=.o)
+DEP = $(SRC:%.c=$(DEPDIR)/%.d)
 
-all: ${BIN}
+all: $(BIN)
 
-${BIN}: ${OBJ}
-	${CC} -o $@ ${OBJ} ${LDFLAGS}
+$(BIN): $(OBJ)
+	$(CC) -o $@ $(OBJ) $(LDFLAGS)
 
-%.o: %.c Makefile ${DEPFILE}
-	${CC} -c ${CFLAGS} $<
+%.o: %.c Makefile $(DEPDIR)/%.d | $(DEPDIR)
+	$(CC) -c $(CFLAGS) $(DEPFLAGS) $<
 
-${DEPFILE}: ${SRC}
-	${CC} ${DEPFLAGS} ${SRC} > $@
+$(DEPDIR):
+	@mkdir -p $@
 
-include ${DEPFILE}
+$(DEP):
+
+include $(wildcard $(DEP))
 
 clean:
-	@rm -f ${BIN} ${OBJ} ${DEPFILE}
+	@rm -f $(BIN) $(OBJ)
+	@rm -rf $(DEPDIR)
 
-run:	${BIN}
-	@./${BIN}
+run:	$(BIN)
+	@./$(BIN)
 
 .PHONY:	all clean run

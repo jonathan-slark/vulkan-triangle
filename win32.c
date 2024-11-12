@@ -7,8 +7,6 @@
 #include "util.h"
 #include "vulkan_instance.h"
 
-#define UNUSED(x) (void) (x)
-
 #define CLASSNAME L"Vulkan Test Window Class"
 #define TITLE     L"Vulkan Test"
 #define WIDTH     800

@@ -1,5 +1,0 @@
-vulkan_debug.o: vulkan_debug.c vulkan_debug.h
-vulkan_device.o: vulkan_device.c util.h vulkan_device.h vulkan_instance.h
-vulkan_instance.o: vulkan_instance.c vulkan_debug.h vulkan_device.h \
- vulkan_instance.h
-win32.o: win32.c util.h vulkan_instance.h
