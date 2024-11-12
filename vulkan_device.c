@@ -11,33 +11,6 @@ struct QueueFamilyIndices {
     bool isComplete;
 };
 
-bool isDeviceSuitable(VkPhysicalDevice device);
-struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
-
-void pickPhysicalDevice() {
-    uint32_t deviceCount;
-    vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
-    assert(deviceCount > 0);
-
-    VkPhysicalDevice devices[deviceCount];
-    vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
-
-    for (uint32_t i = 0; i < deviceCount; i++) {
-	if (isDeviceSuitable(devices[i])) {
-	    physicalDevice = devices[i];
-	    break;
-	}
-    }
-
-    assert(physicalDevice != VK_NULL_HANDLE);
-}
-
-bool isDeviceSuitable(VkPhysicalDevice device) {
-    struct QueueFamilyIndices indices = findQueueFamilies(device);
-
-    return indices.isComplete;
-}
-
 struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
     struct QueueFamilyIndices indices;
 
@@ -56,4 +29,30 @@ struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
     }
 
     return indices;
+}
+
+bool isDeviceSuitable(VkPhysicalDevice device) {
+    struct QueueFamilyIndices indices = findQueueFamilies(device);
+
+    return indices.isComplete;
+}
+
+void pickPhysicalDevice() {
+    uint32_t deviceCount;
+    VkInstance instance = *getInstance();
+
+    vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
+    assert(deviceCount > 0);
+
+    VkPhysicalDevice devices[deviceCount];
+    vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
+
+    for (uint32_t i = 0; i < deviceCount; i++) {
+	if (isDeviceSuitable(devices[i])) {
+	    physicalDevice = devices[i];
+	    break;
+	}
+    }
+
+    assert(physicalDevice != VK_NULL_HANDLE);
 }

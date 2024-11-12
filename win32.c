@@ -4,15 +4,34 @@
 
 #include <assert.h>
 #include <windows.h>
+#include "config.h"
 #include "util.h"
 #include "vulkan_instance.h"
 
-#define CLASSNAME L"Vulkan Test Window Class"
-#define TITLE     L"Vulkan Test"
-#define WIDTH     800
-#define HEIGHT    600
+#define CLASSNAME L"" APPNAME " Window Class"
+#define TITLE     L"" APPNAME
 
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch (uMsg)
+    {
+	case WM_DESTROY:
+	    // Request to quit
+	    PostQuitMessage(0);
+	    return 0;
+
+	case WM_PAINT:
+	    PAINTSTRUCT ps;
+	    HDC hdc = BeginPaint(hwnd, &ps);
+	    FillRect(hdc, &ps.rcPaint, (HBRUSH) (COLOR_WINDOW+1));
+	    EndPaint(hwnd, &ps);
+	    return 0;
+
+    }
+
+    // If we don't handle the message, use the default handler
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
@@ -36,7 +55,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	    (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX),
 
 	    // Size and position 
-	    CW_USEDEFAULT, CW_USEDEFAULT, WIDTH, HEIGHT,
+	    CW_USEDEFAULT, CW_USEDEFAULT, APPWIDTH, APPHEIGHT,
 
 	    NULL,       // Parent window 
 	    NULL,       // Menu 
@@ -63,26 +82,4 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     termVulkan();
 
     return 0;
-}
-
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    switch (uMsg)
-    {
-	case WM_DESTROY:
-	    // Request to quit
-	    PostQuitMessage(0);
-	    return 0;
-
-	case WM_PAINT:
-	    PAINTSTRUCT ps;
-	    HDC hdc = BeginPaint(hwnd, &ps);
-	    FillRect(hdc, &ps.rcPaint, (HBRUSH) (COLOR_WINDOW+1));
-	    EndPaint(hwnd, &ps);
-	    return 0;
-
-    }
-
-    // If we don't handle the message, use the default handler
-    return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }

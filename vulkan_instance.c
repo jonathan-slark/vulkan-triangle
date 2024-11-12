@@ -1,29 +1,24 @@
 #include <assert.h>
 #include <vulkan/vulkan.h>
+#include "config.h"
 #include "vulkan_debug.h"
 #include "vulkan_device.h"
 #include "vulkan_instance.h"
 
-#define APPNAME "Vulkan Test"
-#define APPVER  VK_MAKE_VERSION(1, 0, 0)
+const char *validationLayers[] = { VALIDATIONLAYER };
+#ifdef DEBUG
+const char *extensions[]       = { DEBUGEXT };
+#else
+const char *extensions[];
+#endif // DEBUG
 
-const char *validationlayers[] = { VALIDATIONLAYER };
+#define NUMLAYERS (sizeof validationLayers / sizeof validationLayers[0])
+#define NUMEXT    (sizeof extensions / sizeof extensions[0])
 
 VkInstance instance;
 
-void createInstance();
-void destroyInstance();
-
-void initVulkan() {
-#ifdef DEBUG
-    assert(checkValidationLayerSupport());
-#endif // DEBUG
-    createInstance();
-    pickPhysicalDevice();
-}
-
-void termVulkan() {
-    destroyInstance();
+VkInstance *getInstance() {
+    return &instance;
 }
 
 void createInstance() {
@@ -37,8 +32,10 @@ void createInstance() {
     createInfo.sType            = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
 #ifdef DEBUG
-    createInfo.enabledLayerCount = 1;
-    createInfo.ppEnabledLayerNames = validationlayers;
+    createInfo.enabledLayerCount = NUMLAYERS;
+    createInfo.ppEnabledLayerNames = validationLayers;
+    createInfo.enabledExtensionCount = NUMEXT;
+    createInfo.ppEnabledExtensionNames = extensions;
 #endif // DEBUG
 
     assert(vkCreateInstance(&createInfo, NULL, &instance) == VK_SUCCESS);
@@ -46,4 +43,22 @@ void createInstance() {
 
 void destroyInstance() {
     vkDestroyInstance(instance, NULL);
+}
+
+void initVulkan() {
+#ifdef DEBUG
+    assert(checkValidationLayerSupport());
+#endif // DEBUG
+    createInstance();
+#ifdef DEBUG
+    initDebugMessenger();
+#endif
+    pickPhysicalDevice();
+}
+
+void termVulkan() {
+#ifdef DEBUG
+    termDebugMessenger();
+#endif
+    destroyInstance();
 }

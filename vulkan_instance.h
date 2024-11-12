@@ -5,8 +5,7 @@
 
 #define VK_USE_PLATFORM_WIN32_KHR
 
-extern VkInstance instance;
-
+VkInstance *getInstance();
 void initVulkan();
 void termVulkan();
 
