@@ -5,7 +5,9 @@
 
 #define VK_USE_PLATFORM_WIN32_KHR
 
-VkInstance *getInstance();
+VkInstance getInstance();
+const char **getValidationLayers();
+int getNumLayers();
 void initVulkan();
 void termVulkan();
 

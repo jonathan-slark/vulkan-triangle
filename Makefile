@@ -5,7 +5,7 @@ DEPFLAGS = -MMD -MP -MT $@ -MF $(DEPDIR)/$*.d
 DEPDIR   = .dep
 
 BIN = vulkan_test.exe
-SRC = vulkan_debug.c vulkan_device.c vulkan_instance.c win32.c
+SRC = vulkan_debug.c vulkan_device.c vulkan_physicaldevice.c vulkan_instance.c win32.c
 OBJ = $(SRC:.c=.o)
 DEP = $(SRC:%.c=$(DEPDIR)/%.d)
 

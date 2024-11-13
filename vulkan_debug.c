@@ -47,7 +47,7 @@ VkResult CreateDebugUtilsMessengerEXT(
 	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
 	const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
 
-    PFN_vkCreateDebugUtilsMessengerEXT func = 
+    PFN_vkCreateDebugUtilsMessengerEXT func =
 	(PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func == NULL) {
         return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -61,7 +61,7 @@ VkResult DestroyDebugUtilsMessengerEXT(
 	VkDebugUtilsMessengerEXT debugMessenger,
 	const VkAllocationCallbacks* pAllocator) {
 
-    PFN_vkDestroyDebugUtilsMessengerEXT func = 
+    PFN_vkDestroyDebugUtilsMessengerEXT func =
 	(PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func == NULL) {
         return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -71,7 +71,7 @@ VkResult DestroyDebugUtilsMessengerEXT(
     }
 }
 
-void initDebugMessenger() {
+void createDebugMessenger() {
     VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
@@ -83,9 +83,9 @@ void initDebugMessenger() {
     createInfo.pfnUserCallback = debugCallback;
     createInfo.pUserData = NULL; // Optional
 
-    assert(CreateDebugUtilsMessengerEXT(*getInstance(), &createInfo, NULL, &debugMessenger) == VK_SUCCESS);
+    assert(CreateDebugUtilsMessengerEXT(getInstance(), &createInfo, NULL, &debugMessenger) == VK_SUCCESS);
 }
 
-void termDebugMessenger() {
-    assert(DestroyDebugUtilsMessengerEXT(*getInstance(), debugMessenger, NULL) == VK_SUCCESS);
+void destroyDebugMessenger() {
+    assert(DestroyDebugUtilsMessengerEXT(getInstance(), debugMessenger, NULL) == VK_SUCCESS);
 }

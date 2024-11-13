@@ -1,58 +1,43 @@
 #include <assert.h>
-#include <stdbool.h>
 #include <vulkan/vulkan.h>
+#include "util.h"
 #include "vulkan_device.h"
 #include "vulkan_instance.h"
+#include "vulkan_physicaldevice.h"
 
-VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+VkDevice device;
+VkQueue graphicsQueue;
 
-struct QueueFamilyIndices {
-    uint32_t graphicsFamily;
-    bool isComplete;
-};
+void createLogicalDevice() {
+    struct QueueFamilyIndices indices = findQueueFamilies(getPhysicalDevice());
+    float queuePriority = 1.0f;
 
-struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
-    struct QueueFamilyIndices indices;
+    VkDeviceQueueCreateInfo queueCreateInfo = {};
+    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily;
+    queueCreateInfo.queueCount = 1;
+    queueCreateInfo.pQueuePriorities = &queuePriority;
 
-    uint32_t queueFamilyCount;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
+    VkPhysicalDeviceFeatures deviceFeatures = {};
+    
+    VkDeviceCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    createInfo.pQueueCreateInfos = &queueCreateInfo;
+    createInfo.queueCreateInfoCount = 1;
+    createInfo.pEnabledFeatures = &deviceFeatures;
 
-    VkQueueFamilyProperties queueFamilies[queueFamilyCount];
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies);
+#ifdef DEBUG
+    createInfo.enabledLayerCount = getNumLayers();
+    createInfo.ppEnabledLayerNames = getValidationLayers();
+#else
+    createInfo.enabledExtensionCount = 0;
+#endif // DEBUG
 
-    for (uint32_t i = 0; i < queueFamilyCount; i++) {
-	if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-	    indices.graphicsFamily = i;
-	    indices.isComplete = true;
-	    break;
-	}
-    }
+    assert(vkCreateDevice(getPhysicalDevice(), &createInfo, NULL, &device) == VK_SUCCESS);
 
-    return indices;
+    vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
 }
 
-bool isDeviceSuitable(VkPhysicalDevice device) {
-    struct QueueFamilyIndices indices = findQueueFamilies(device);
-
-    return indices.isComplete;
-}
-
-void pickPhysicalDevice() {
-    uint32_t deviceCount;
-    VkInstance instance = *getInstance();
-
-    vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
-    assert(deviceCount > 0);
-
-    VkPhysicalDevice devices[deviceCount];
-    vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
-
-    for (uint32_t i = 0; i < deviceCount; i++) {
-	if (isDeviceSuitable(devices[i])) {
-	    physicalDevice = devices[i];
-	    break;
-	}
-    }
-
-    assert(physicalDevice != VK_NULL_HANDLE);
+void destroyLogicalDevice() {
+    vkDestroyDevice(device, NULL);
 }

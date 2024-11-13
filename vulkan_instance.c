@@ -3,7 +3,11 @@
 #include "config.h"
 #include "vulkan_debug.h"
 #include "vulkan_device.h"
+#include "vulkan_physicaldevice.h"
 #include "vulkan_instance.h"
+
+// Based on:
+// https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/00_Setup/00_Base_code.html
 
 const char *validationLayers[] = { VALIDATIONLAYER };
 #ifdef DEBUG
@@ -17,8 +21,16 @@ const char *extensions[];
 
 VkInstance instance;
 
-VkInstance *getInstance() {
-    return &instance;
+VkInstance getInstance() {
+    return instance;
+}
+
+const char **getValidationLayers() {
+    return validationLayers;
+}
+
+int getNumLayers() {
+    return NUMLAYERS;
 }
 
 void createInstance() {
@@ -51,14 +63,16 @@ void initVulkan() {
 #endif // DEBUG
     createInstance();
 #ifdef DEBUG
-    initDebugMessenger();
+    createDebugMessenger();
 #endif
     pickPhysicalDevice();
+    createLogicalDevice();
 }
 
 void termVulkan() {
+    destroyLogicalDevice();
 #ifdef DEBUG
-    termDebugMessenger();
+    destroyDebugMessenger();
 #endif
     destroyInstance();
 }
