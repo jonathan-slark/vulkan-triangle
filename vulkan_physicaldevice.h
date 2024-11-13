@@ -6,7 +6,9 @@
 
 struct QueueFamilyIndices {
     uint32_t graphicsFamily;
+    uint32_t presentFamily;
     bool isComplete;
+    uint32_t num;
 };
 
 void pickPhysicalDevice();

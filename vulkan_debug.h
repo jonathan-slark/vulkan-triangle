@@ -5,7 +5,6 @@
 #include <vulkan/vulkan.h>
 
 #define VALIDATIONLAYER "VK_LAYER_KHRONOS_validation"
-#define DEBUGEXT        VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 
 bool checkValidationLayerSupport();
 void createDebugMessenger();

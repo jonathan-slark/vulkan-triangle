@@ -7,9 +7,16 @@
 #include "config.h"
 #include "util.h"
 #include "vulkan_instance.h"
+#include "win32.h"
 
 #define CLASSNAME L"" APPNAME " Window Class"
 #define TITLE     L"" APPNAME
+
+HWND hwnd;
+
+HWND getHwnd() {
+    return hwnd;
+}
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -21,10 +28,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	    return 0;
 
 	case WM_PAINT:
+	    /*
 	    PAINTSTRUCT ps;
 	    HDC hdc = BeginPaint(hwnd, &ps);
 	    FillRect(hdc, &ps.rcPaint, (HBRUSH) (COLOR_WINDOW+1));
 	    EndPaint(hwnd, &ps);
+	    */
 	    return 0;
 
     }
@@ -46,7 +55,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     RegisterClass(&wc);
 
     // Create the window 
-    HWND hwnd = CreateWindowEx(
+    hwnd = CreateWindowEx(
 	    0,         // Optional window styles 
 	    CLASSNAME, // Window class 
 	    TITLE,     // Window text 
