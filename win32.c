@@ -27,15 +27,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	    PostQuitMessage(0);
 	    return 0;
 
+	/*
 	case WM_PAINT:
-	    /*
 	    PAINTSTRUCT ps;
 	    HDC hdc = BeginPaint(hwnd, &ps);
 	    FillRect(hdc, &ps.rcPaint, (HBRUSH) (COLOR_WINDOW+1));
 	    EndPaint(hwnd, &ps);
-	    */
 	    return 0;
-
+	*/
     }
 
     // If we don't handle the message, use the default handler
@@ -80,7 +79,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     ShowWindow(hwnd, nCmdShow);
 
     // Run the message loop 
-    MSG msg = { };
+    MSG msg = {};
     while (GetMessage(&msg, NULL, 0, 0) > 0)
     {
 	TranslateMessage(&msg);

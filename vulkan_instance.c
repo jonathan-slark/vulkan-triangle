@@ -53,6 +53,11 @@ void createInstance() {
     createInfo.ppEnabledLayerNames = validationLayers;
     createInfo.enabledExtensionCount = NUMEXT;
     createInfo.ppEnabledExtensionNames = extensions;
+
+    // main debug messenger doesn't exist in instance creation and destruction
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo = {};
+    populateDebugMessengerCreateInfo(&debugCreateInfo);
+    createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*) &debugCreateInfo;
 #endif // DEBUG
 
     assert(vkCreateInstance(&createInfo, NULL, &instance) == VK_SUCCESS);

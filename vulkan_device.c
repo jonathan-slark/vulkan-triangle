@@ -5,17 +5,20 @@
 #include "vulkan_instance.h"
 #include "vulkan_physicaldevice.h"
 
+const char *deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+#define NUMDEVICEEXT (sizeof deviceExtensions / sizeof deviceExtensions[0])
+
 VkDevice device;
 VkQueue graphicsQueue;
 VkQueue presentQueue;
 
 void createLogicalDevice() {
-    struct QueueFamilyIndices indices = findQueueFamilies(getPhysicalDevice());
-    float queuePriority = 1.0f;
-
     // Create a queue for each queue family
-    VkDeviceQueueCreateInfo queueCreateInfos[indices.num] = {};
-    for (uint32_t i = 0; i < indices.num; i++) {
+    struct QueueFamilyIndices indices = findQueueFamilies(getPhysicalDevice());
+    VkDeviceQueueCreateInfo queueCreateInfos[indices.numFamilies] = {}; // VLA
+    float queuePriority = 1.0f;
+    for (uint32_t i = 0; i < indices.numFamilies; i++) {
 	queueCreateInfos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 	queueCreateInfos[i].queueFamilyIndex = i;
 	queueCreateInfos[i].queueCount = 1;
@@ -28,9 +31,10 @@ void createLogicalDevice() {
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.pQueueCreateInfos = queueCreateInfos;
-    createInfo.queueCreateInfoCount = indices.num;
+    createInfo.queueCreateInfoCount = indices.numFamilies;
     createInfo.pEnabledFeatures = &deviceFeatures;
-    createInfo.enabledExtensionCount = 0;
+    createInfo.enabledExtensionCount = NUMDEVICEEXT;
+    createInfo.ppEnabledExtensionNames = deviceExtensions;
 #ifdef DEBUG
     createInfo.enabledLayerCount = getNumLayers();
     createInfo.ppEnabledLayerNames = getValidationLayers();

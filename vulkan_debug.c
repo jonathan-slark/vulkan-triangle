@@ -10,21 +10,29 @@
 VkDebugUtilsMessengerEXT debugMessenger;
 
 bool checkValidationLayerSupport() {
+    // Get available layers
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, NULL);
-    if (layerCount == 0) {
-	return false;
-    }
-
-    VkLayerProperties layersAvailable[layerCount];
+    VkLayerProperties layersAvailable[layerCount]; // VLA
     vkEnumerateInstanceLayerProperties(&layerCount, layersAvailable);
 
-    for (uint32_t i = 0; i < layerCount; i++) {
-	if (strcmp(layersAvailable[i].layerName, VALIDATIONLAYER) == 0) {
-	    return true;
+    // Check if layers we need are available
+    const char **validationLayers = getValidationLayers();
+    for (int i = 0; i < getNumLayers(); i++) {
+	bool layerFound = false;
+
+	for (uint32_t j = 0; j < layerCount; j++) {
+	    if (strcmp(validationLayers[i], layersAvailable[j].layerName) == 0) {
+		layerFound = true;
+		break;
+	    }
+	}
+
+	if (!layerFound) {
+	    return false;
 	}
     }
-    return false;
+    return true;
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -45,10 +53,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 VkResult CreateDebugUtilsMessengerEXT(
 	VkInstance instance,
 	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-	const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
+	const VkAllocationCallbacks* pAllocator,
+	VkDebugUtilsMessengerEXT* pDebugMessenger) {
 
     PFN_vkCreateDebugUtilsMessengerEXT func =
-	(PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+	(PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance,
+		"vkCreateDebugUtilsMessengerEXT");
     if (func == NULL) {
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     } else {
@@ -62,7 +72,8 @@ VkResult DestroyDebugUtilsMessengerEXT(
 	const VkAllocationCallbacks* pAllocator) {
 
     PFN_vkDestroyDebugUtilsMessengerEXT func =
-	(PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+	(PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance,
+		"vkDestroyDebugUtilsMessengerEXT");
     if (func == NULL) {
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     } else {
@@ -71,18 +82,24 @@ VkResult DestroyDebugUtilsMessengerEXT(
     }
 }
 
-void createDebugMessenger() {
-    VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT *createInfo) {
+    createInfo->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createInfo->messageSeverity =
+	//VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+	//VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+    createInfo->messageType =
+	VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo.pfnUserCallback = debugCallback;
-    createInfo.pUserData = NULL; // Optional
+    createInfo->pfnUserCallback = debugCallback;
+}
 
+void createDebugMessenger() {
+    VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
+
+    populateDebugMessengerCreateInfo(&createInfo);
     assert(CreateDebugUtilsMessengerEXT(getInstance(), &createInfo, NULL, &debugMessenger) == VK_SUCCESS);
 }
 

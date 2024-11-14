@@ -7,6 +7,7 @@
 #define VALIDATIONLAYER "VK_LAYER_KHRONOS_validation"
 
 bool checkValidationLayerSupport();
+void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT *);
 void createDebugMessenger();
 void destroyDebugMessenger();
 
