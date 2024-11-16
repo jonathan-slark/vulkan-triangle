@@ -1,21 +1,27 @@
 #include <assert.h>
-#include <stdbool.h>
-#include <stdlib.h>
+#include <string.h>
 #include <vulkan/vulkan.h>
 #include "vulkan_instance.h"
 #include "vulkan_physicaldevice.h"
 #include "vulkan_surface.h"
+#include "vulkan_swapchain.h"
 
-struct SwapChainSupportDetails {
-    VkSurfaceCapabilitiesKHR capabilities;
-    VkSurfaceFormatKHR *formats;
-    VkPresentModeKHR *presentModes;
-} swapChainSupport;
+const char *deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+#define NUMDEVICEEXTENSIONS (sizeof deviceExtensions / sizeof deviceExtensions[0])
 
 VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 
 VkPhysicalDevice getPhysicalDevice() {
     return physicalDevice;
+}
+
+const char **getDeviceExtensions() {
+    return deviceExtensions;
+}
+
+uint32_t getNumDeviceExtensions() {
+    return NUMDEVICEEXTENSIONS;
 }
 
 struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
@@ -56,50 +62,30 @@ bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
     // Get available extensions
     uint32_t extensionCount;
     vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, NULL);
-    VkExtensionProperties availableExtensions[extensionCount];
+    VkExtensionProperties availableExtensions[extensionCount]; // VLA
     vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount,
 	    availableExtensions);
 
     // Check we have required extensions
-    for (uint32_t i = 0; i < extensionCount; i++) {
-	// TODO
+    for (uint32_t i = 0; i < NUMDEVICEEXTENSIONS; i++) {
+	bool extensionFound = false;
+
+	for (uint32_t j = 0; j < extensionCount; j++) {
+	    if (strcmp(deviceExtensions[i],
+			availableExtensions[j].extensionName) == 0) {
+		extensionFound = true;
+		break;
+	    }
+	}
+
+	if (extensionFound) {
+	    continue;
+	} else {
+	    return false;
+	}
     }
 
     return true;
-}
-
-void querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
-    struct SwapChainSupportDetails swapChainSupport;
-
-    // Get basic surface capabilities
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface,
-	    &swapChainSupport.capabilities);
-
-    // Get supported surface formats
-    uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, NULL);
-    if (formatCount > 0) {
-	swapChainSupport.formats = calloc(formatCount,
-		sizeof(VkSurfaceFormatKHR));
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount,
-		swapChainSupport.formats);
-    }
-
-    // Get supported presentation modes
-    uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface,
-	    &presentModeCount, NULL);
-    if (presentModeCount != 0) {
-	swapChainSupport.presentModes = calloc(presentModeCount,
-		sizeof(VkPresentModeKHR));
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface,
-		&presentModeCount, swapChainSupport.presentModes);
-    }
-}
-
-void freeSwapChainSupport() {
-    free(swapChainSupport.formats);
-    free(swapChainSupport.presentModes);
 }
 
 bool isDeviceSuitable(VkPhysicalDevice device) {
@@ -109,9 +95,9 @@ bool isDeviceSuitable(VkPhysicalDevice device) {
     bool swapChainAdequate = false;
     if (extensionsSupported) {
 	querySwapChainSupport(device, getSurface());
-	swapChainAdequate =
-	    swapChainSupport.formats      != NULL &&
-	    swapChainSupport.presentModes != NULL;
+	struct SwapChainSupportDetails details = getDetails();
+	swapChainAdequate = details.formats != NULL &&
+	    details.presentModes != NULL;
 	freeSwapChainSupport();
     }
 

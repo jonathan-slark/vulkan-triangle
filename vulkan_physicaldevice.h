@@ -13,6 +13,8 @@ struct QueueFamilyIndices {
 
 void pickPhysicalDevice();
 VkPhysicalDevice getPhysicalDevice();
+const char **getDeviceExtensions();
+uint32_t getNumDeviceExtensions();
 struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice);
 
 #endif // VULKAN_PHYSICALDEVICE_H

@@ -18,20 +18,24 @@ bool checkValidationLayerSupport() {
 
     // Check if layers we need are available
     const char **validationLayers = getValidationLayers();
-    for (int i = 0; i < getNumLayers(); i++) {
+    for (uint32_t i = 0; i < getNumLayers(); i++) {
 	bool layerFound = false;
 
 	for (uint32_t j = 0; j < layerCount; j++) {
-	    if (strcmp(validationLayers[i], layersAvailable[j].layerName) == 0) {
+	    if (strcmp(validationLayers[i],
+			layersAvailable[j].layerName) == 0) {
 		layerFound = true;
 		break;
 	    }
 	}
 
-	if (!layerFound) {
+	if (layerFound) {
+	    continue;
+	} else {
 	    return false;
 	}
     }
+
     return true;
 }
 
