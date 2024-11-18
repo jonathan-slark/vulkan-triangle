@@ -12,7 +12,11 @@ struct SwapChainSupportDetails {
 };
 
 struct SwapChainSupportDetails getDetails();
+VkImage *getSwapChainImages();
+uint32_t getSwapChainImageNum();
 void querySwapChainSupport(VkPhysicalDevice, VkSurfaceKHR);
 void freeSwapChainSupport();
+void createSwapChain();
+void destroySwapChain();
 
 #endif // VULKAN_SWAPCHAIN_H

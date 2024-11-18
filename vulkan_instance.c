@@ -5,9 +5,11 @@
 #include "config.h"
 #include "vulkan_debug.h"
 #include "vulkan_device.h"
+#include "vulkan_imageview.h"
 #include "vulkan_instance.h"
 #include "vulkan_physicaldevice.h"
 #include "vulkan_surface.h"
+#include "vulkan_swapchain.h"
 
 // Based on:
 // https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/00_Setup/00_Base_code.html
@@ -82,9 +84,12 @@ void initVulkan() {
     createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
+    createSwapChain();
+    createImageViews();
 }
 
 void termVulkan() {
+    destroySwapChain();
     destroyLogicalDevice();
 #ifdef DEBUG
     destroyDebugMessenger();

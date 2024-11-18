@@ -98,7 +98,6 @@ bool isDeviceSuitable(VkPhysicalDevice device) {
 	struct SwapChainSupportDetails details = getDetails();
 	swapChainAdequate = details.formats != NULL &&
 	    details.presentModes != NULL;
-	freeSwapChainSupport();
     }
 
     return indices.isSuitable && extensionsSupported && swapChainAdequate;

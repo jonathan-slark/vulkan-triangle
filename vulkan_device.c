@@ -9,6 +9,10 @@ VkDevice device;
 VkQueue graphicsQueue;
 VkQueue presentQueue;
 
+VkDevice getDevice() {
+    return device;
+}
+
 void createLogicalDevice() {
     // Create a queue for each queue family
     struct QueueFamilyIndices indices = findQueueFamilies(getPhysicalDevice());
