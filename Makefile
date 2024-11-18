@@ -1,5 +1,6 @@
 CC       = gcc
-CFLAGS   = -I/mingw64/include -Wall -Wextra -g -DDEBUG
+CPPFLAGS = -D_POSIX_C_SOURCE=200809L -DDEBUG
+CFLAGS   = -I/mingw64/include -std=c99 -pedantic -Wall -Wextra -g -O0
 LDFLAGS  = -L/mingw64/lib -municode -mwindows -lvulkan-1
 DEPFLAGS = -MMD -MP -MT $@ -MF $(DEPDIR)/$*.d
 DEPDIR   = .dep
@@ -16,7 +17,7 @@ $(BIN): $(OBJ)
 	$(CC) -o $@ $(OBJ) $(LDFLAGS)
 
 %.o: %.c Makefile $(DEPDIR)/%.d | $(DEPDIR)
-	$(CC) -c $(CFLAGS) $(DEPFLAGS) $<
+	$(CC) -c $(CPPFLAGS) $(CFLAGS) $(DEPFLAGS) $<
 
 $(DEPDIR):
 	@mkdir -p $@
