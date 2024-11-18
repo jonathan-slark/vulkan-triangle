@@ -89,6 +89,7 @@ void initVulkan() {
 }
 
 void termVulkan() {
+    destroyImageViews();
     destroySwapChain();
     destroyLogicalDevice();
 #ifdef DEBUG

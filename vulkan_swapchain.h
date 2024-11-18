@@ -14,6 +14,7 @@ struct SwapChainSupportDetails {
 struct SwapChainSupportDetails getDetails();
 VkImage *getSwapChainImages();
 uint32_t getSwapChainImageNum();
+VkFormat getSwapChainImageFormat();
 void querySwapChainSupport(VkPhysicalDevice, VkSurfaceKHR);
 void freeSwapChainSupport();
 void createSwapChain();

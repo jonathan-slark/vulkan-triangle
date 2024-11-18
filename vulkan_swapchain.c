@@ -28,6 +28,10 @@ uint32_t getSwapChainImageNum() {
     return swapChainImageNum;
 }
 
+VkFormat getSwapChainImageFormat() {
+    return swapChainImageFormat;
+}
+
 void querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
     // Get basic surface capabilities
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface,
