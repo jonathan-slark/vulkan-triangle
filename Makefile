@@ -1,34 +1,28 @@
-CC       = gcc
-CPPFLAGS = -D_POSIX_C_SOURCE=200809L -DDEBUG
-CFLAGS   = -I/mingw64/include -std=c99 -pedantic -Wall -Wextra -g -O0
-LDFLAGS  = -L/mingw64/lib -municode -mwindows -lvulkan-1
-DEPFLAGS = -MMD -MP -MT $@ -MF $(DEPDIR)/$*.d
-DEPDIR   = .dep
+.POSIX:
 
-BIN = vulkan_triangle.exe
-SRC = vulkan_debug.c vulkan_device.c vulkan_imageview.c vulkan_instance.c \
-      vulkan_physicaldevice.c vulkan_surface.c vulkan_swapchain.c win32.c
+CC       = gcc
+CPPFLAGS = -D_POSIX_C_SOURCE=200809L -DDEBUG -DUNICODE \
+	   -DVK_USE_PLATFORM_WIN32_KHR
+CFLAGS   = -I/mingw64/include -std=c90 -pedantic -Wall -Wextra -g -O0
+LDFLAGS  = -L/mingw64/lib -municode -mwindows -lvulkan-1
+
+BIN = triangle.exe
+SRC = vulkan.c win32.c
 OBJ = $(SRC:.c=.o)
-DEP = $(SRC:%.c=$(DEPDIR)/%.d)
 
 all: $(BIN)
 
 $(BIN): $(OBJ)
 	$(CC) -o $@ $(OBJ) $(LDFLAGS)
 
-%.o: %.c Makefile $(DEPDIR)/%.d | $(DEPDIR)
-	$(CC) -c $(CPPFLAGS) $(CFLAGS) $(DEPFLAGS) $<
+%.o: %.c
+	$(CC) -c $(CPPFLAGS) $(CFLAGS) $<
 
-$(DEPDIR):
-	@mkdir -p $@
-
-$(DEP):
-
-include $(wildcard $(DEP))
+vulkan.c: config.h win32.h
+win32.c: config.h util.h vulkan.h win32.h
 
 clean:
 	@rm -f $(BIN) $(OBJ)
-	@rm -rf $(DEPDIR)
 
 run:	$(BIN)
 	@./$(BIN)

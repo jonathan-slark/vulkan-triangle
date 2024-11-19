@@ -1,11 +1,6 @@
-#ifndef CONFIG_H
-#define CONFIG_H
-
 #include <vulkan/vulkan.h>
 
-#define APPNAME   "Vulkan Test"
-#define APPVER    VK_MAKE_VERSION(1, 0, 0)
-#define APPWIDTH  800
-#define APPHEIGHT 600
-
-#endif // CONFIG_H
+static const char appname[]         = "Vulkan Test";
+static const unsigned int appver    = VK_MAKE_VERSION(1, 0, 0);
+static const unsigned int appwidth  = 800;
+static const unsigned int appheight = 600;
