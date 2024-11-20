@@ -16,6 +16,29 @@
 #define NUMEXTS   (sizeof exts   / sizeof exts[0])
 
 /* Function declarations */
+#ifdef DEBUG
+static uint32_t checkvalidationlayersupport(void);
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+	VkDebugUtilsMessageTypeFlagsEXT messageType,
+	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+	void* pUserData
+	);
+static VkResult CreateDebugUtilsMessengerEXT(
+	VkInstance instance,
+	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+	const VkAllocationCallbacks* pAllocator,
+	VkDebugUtilsMessengerEXT* pDebugMessenger
+	);
+static VkResult DestroyDebugUtilsMessengerEXT(
+	VkInstance instance,
+	VkDebugUtilsMessengerEXT debugmessenger,
+	const VkAllocationCallbacks* pAllocator
+	);
+static void populatedebugci(VkDebugUtilsMessengerCreateInfoEXT *ci);
+static void createdebugmessenger(void);
+static void destroydebugmessenger(void);
+#endif // DEBUG
 void vk_initialise(void);
 void vk_terminate(void);
 static void createinstance(void);
@@ -23,12 +46,13 @@ static void destroyinstance(void);
 
 /* Variables */
 #ifdef DEBUG
-static const char *layers[] = { VALIDATIONLAYER };
+static const char *layers[] = { "VK_LAYER_KHRONOS_validation" };
 static const char *exts[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
     VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
     VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 };
+VkDebugUtilsMessengerEXT debugmessenger;
 #else
 static const char *exts[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
@@ -38,131 +62,52 @@ static const char *exts[] = {
 static VkInstance instance;
 
 /* Function implementations */
-void
-vk_initialise(void)
-{
+
 #ifdef DEBUG
-    assert(checkValidationLayerSupport());
-#endif /* DEBUG */
-    createinstance();
-#ifdef DEBUG
-    createdebugmessenger();
-#endif /* DEBUG */
-    createsurface();
-    pickphysicaldevice();
-    createLogicalDevice();
-    createSwapChain();
-    createImageViews();
-}
 
-void
-vk_terminate(void)
+bool
+checkvalidationlayersupport(void)
 {
-    destroyImageViews();
-    destroySwapChain();
-    destroyLogicalDevice();
-#ifdef DEBUG
-    destroyDebugMessenger();
-#endif /* DEBUG */
-    destroySurface();
-    destroyinstance();
-}
+    uint32_t availablenum, i, j, found;
+    VkLayerProperties *availablelayers;
 
-void
-createinstance(void)
-{
-    VkApplicationInfo appinfo                          = { 0 };
-    VkInstanceCreateInfo createinfo                    = { 0 };
-    VkDebugUtilsMessengerCreateInfoEXT debugcreateinfo = { 0 };
-
-    appinfo.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appinfo.pApplicationName   = appname;
-    appinfo.applicationVersion = appver;
-    appinfo.apiVersion         = VK_API_VERSION_1_0;
-
-    createinfo.sType            = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createinfo.pApplicationInfo = &appinfo;
-#ifdef DEBUG
-    createinfo.enabledLayerCount       = NUMLAYERS;
-    createinfo.ppEnabledLayerNames     = layers;
-    createinfo.enabledExtensionCount   = NUMEXTS;
-    createinfo.ppEnabledExtensionNames = exts;
-
-    /* Main debug messenger doesn't exist in instance creation and
-     * destruction */
-    populateDebugMessengerCreateInfo(&debugcreateinfo);
-    createinfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT *) &debugcreateinfo;
-#endif /* DEBUG */
-
-    assert(vkCreateInstance(&createinfo, NULL, &instance) == VK_SUCCESS);
-}
-
-void
-destroyinstance(void)
-{
-    vkDestroyInstance(instance, NULL);
-}
-
-#ifndef VULKAN_DEBUG_H
-#define VULKAN_DEBUG_H
-
-#include <stdbool.h>
-#include <vulkan/vulkan.h>
-
-#define VALIDATIONLAYER "VK_LAYER_KHRONOS_validation"
-
-bool checkValidationLayerSupport();
-void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT *);
-void createdebugmessenger();
-void destroyDebugMessenger();
-
-#endif /* VULKAN_DEBUG_H */
-#include <assert.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <string.h>
-#include <vulkan/vulkan.h>
-#include "util.h"
-#include "vulkan_debug.h"
-#include "vulkan_instance.h"
-
-VkDebugUtilsMessengerEXT debugMessenger;
-
-bool checkValidationLayerSupport() {
     /* Get available layers */
-    uint32_t layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, NULL);
-    VkLayerProperties layersAvailable[layerCount]; /* VLA */
-    vkEnumerateInstanceLayerProperties(&layerCount, layersAvailable);
+    vkEnumerateInstanceLayerProperties(&availablenum, NULL);
+    availablelayers = (VkLayerProperties *) malloc(availablenum *
+	    sizeof(VkLayerProperties));
+    vkEnumerateInstanceLayerProperties(&availablenum, availablelayers);
 
     /* Check if layers we need are available */
-    for (uint32_t i = 0; i < NUMLAYERS; i++) {
-	bool layerFound = false;
+    for (i = 0; i < NUMLAYERS; i++) {
+	found = 0;
 
-	for (uint32_t j = 0; j < layerCount; j++) {
-	    if (strcmp(layers[i],
-			layersAvailable[j].layerName) == 0) {
-		layerFound = true;
+	for (j = 0; j < availablenum; j++) {
+	    if (strcmp(layers[i], availablelayers[j].layerName) == 0) {
+		found = 1;
 		break;
 	    }
 	}
 
-	if (layerFound) {
+	if (found) {
 	    continue;
 	} else {
-	    return false;
+	    free(availablelayers);
+	    return 0;
 	}
     }
 
-    return true;
+    free(availablelayers);
+    return 1;
 }
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+VKAPI_ATTR VkBool32 VKAPI_CALL
+debugCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT messageType,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData) {
-
+    void* pUserData
+    )
+{
     UNUSED(messageSeverity);
     UNUSED(messageType);
     UNUSED(pUserData);
@@ -172,12 +117,14 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-VkResult CreateDebugUtilsMessengerEXT(
+VkResult
+CreateDebugUtilsMessengerEXT(
 	VkInstance instance,
 	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
 	const VkAllocationCallbacks* pAllocator,
-	VkDebugUtilsMessengerEXT* pDebugMessenger) {
-
+	VkDebugUtilsMessengerEXT* pDebugMessenger
+	)
+{
     PFN_vkCreateDebugUtilsMessengerEXT func =
 	(PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance,
 		"vkCreateDebugUtilsMessengerEXT");
@@ -188,46 +135,123 @@ VkResult CreateDebugUtilsMessengerEXT(
     }
 }
 
-VkResult DestroyDebugUtilsMessengerEXT(
+VkResult
+DestroyDebugUtilsMessengerEXT(
 	VkInstance instance,
-	VkDebugUtilsMessengerEXT debugMessenger,
-	const VkAllocationCallbacks* pAllocator) {
-
+	VkDebugUtilsMessengerEXT debugmessenger,
+	const VkAllocationCallbacks* pAllocator
+	)
+{
     PFN_vkDestroyDebugUtilsMessengerEXT func =
 	(PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance,
 		"vkDestroyDebugUtilsMessengerEXT");
     if (func == NULL) {
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     } else {
-        func(instance, debugMessenger, pAllocator);
+        func(instance, debugmessenger, pAllocator);
 	return VK_SUCCESS;
     }
 }
 
-void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT *createInfo) {
-    createInfo->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo->messageSeverity =
+void
+populatedebugci(VkDebugUtilsMessengerCreateInfoEXT *ci) {
+    ci->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    ci->messageSeverity =
 	//VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
 	//VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo->messageType =
+    ci->messageType =
 	VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo->pfnUserCallback = debugCallback;
+    ci->pfnUserCallback = debugCallback;
 }
 
-void createdebugmessenger() {
-    VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
+void
+createdebugmessenger(void)
+{
+    VkDebugUtilsMessengerCreateInfoEXT ci = { 0 };
 
-    populateDebugMessengerCreateInfo(&createInfo);
-    assert(CreateDebugUtilsMessengerEXT(instance, &createInfo, NULL, &debugMessenger) == VK_SUCCESS);
+    populatedebugci(&ci);
+    assert(CreateDebugUtilsMessengerEXT(instance, &ci, NULL, &debugmessenger)
+	    == VK_SUCCESS);
 }
 
-void destroyDebugMessenger() {
-    assert(DestroyDebugUtilsMessengerEXT(instance, debugMessenger, NULL) == VK_SUCCESS);
+void
+destroydebugmessenger(void)
+{
+    assert(DestroyDebugUtilsMessengerEXT(instance, debugmessenger, NULL)
+	    == VK_SUCCESS);
 }
+
+#endif // DEBUG
+
+void
+vk_initialise(void)
+{
+#ifdef DEBUG
+    assert(checkvalidationlayersupport());
+#endif /* DEBUG */
+    createinstance();
+#ifdef DEBUG
+    createdebugmessenger();
+#endif /* DEBUG */
+    createsurface();
+    pickphysicaldevice();
+    createlogicaldevice();
+    createswapchain();
+    createimageviews();
+}
+
+void
+vk_terminate(void)
+{
+    destroyimageviews();
+    destroyswapchain();
+    destroylogicaldevice();
+#ifdef DEBUG
+    destroydebugmessenger();
+#endif /* DEBUG */
+    destroysurface();
+    destroyinstance();
+}
+
+void
+createinstance(void)
+{
+    VkApplicationInfo ai                       = { 0 };
+    VkInstanceCreateInfo ci                    = { 0 };
+    VkDebugUtilsMessengerCreateInfoEXT debugci = { 0 };
+
+    ai.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    ai.pApplicationName   = appname;
+    ai.applicationVersion = appver;
+    ai.apiVersion         = VK_API_VERSION_1_0;
+
+    ci.sType            = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    ci.pApplicationInfo = &ai;
+#ifdef DEBUG
+    ci.enabledLayerCount       = NUMLAYERS;
+    ci.ppEnabledLayerNames     = layers;
+    ci.enabledExtensionCount   = NUMEXTS;
+    ci.ppEnabledExtensionNames = exts;
+
+    /* Main debug messenger doesn't exist in instance creation and
+     * destruction */
+    populatedebugci(&debugci);
+    ci.pNext = (VkDebugUtilsMessengerCreateInfoEXT *) &debugci;
+#endif /* DEBUG */
+
+    assert(vkCreateInstance(&ci, NULL, &instance) == VK_SUCCESS);
+}
+
+void
+destroyinstance(void)
+{
+    vkDestroyInstance(instance, NULL);
+}
+
 #ifndef VULKAN_PHYSICALDEVICE_H
 #define VULKAN_PHYSICALDEVICE_H
 
@@ -378,8 +402,8 @@ void pickphysicaldevice() {
 #include <vulkan/vulkan.h>
 
 VkDevice getDevice();
-void createLogicalDevice();
-void destroyLogicalDevice();
+void createlogicaldevice();
+void destroylogicaldevice();
 
 #endif /* VULKAN_DEVICE_H */
 #include <assert.h>
@@ -397,7 +421,7 @@ VkDevice getDevice() {
     return device;
 }
 
-void createLogicalDevice() {
+void createlogicaldevice() {
     /* Create a queue for each queue family */
     struct QueueFamilyIndices indices = findQueueFamilies(getPhysicalDevice());
     VkDeviceQueueCreateInfo queueCreateInfos[indices.numFamilies] = {}; /* VLA */
@@ -430,7 +454,7 @@ void createLogicalDevice() {
     vkGetDeviceQueue(device, indices.presentFamily, 0, &presentQueue);
 }
 
-void destroyLogicalDevice() {
+void destroylogicaldevice() {
     vkDestroyDevice(device, NULL);
 }
 #ifndef VULKAN_SURFACE_H
@@ -440,7 +464,7 @@ void destroyLogicalDevice() {
 
 VkSurfaceKHR getSurface();
 void createsurface();
-void destroySurface();
+void destroysurface();
 
 #endif /* VULKAN_SURFACE_H */
 #include <assert.h>
@@ -466,7 +490,7 @@ void createsurface() {
     assert(vkCreateWin32SurfaceKHR(instance, &createInfo, NULL, &surface) == VK_SUCCESS);
 }
 
-void destroySurface() {
+void destroysurface() {
     vkDestroySurfaceKHR(instance, surface, NULL);
 }
 #ifndef VULKAN_SWAPCHAIN_H
@@ -488,8 +512,8 @@ uint32_t getSwapChainImageNum();
 VkFormat getSwapChainImageFormat();
 void querySwapChainSupport(VkPhysicalDevice, VkSurfaceKHR);
 void freeSwapChainSupport();
-void createSwapChain();
-void destroySwapChain();
+void createswapchain();
+void destroyswapchain();
 
 #endif /* VULKAN_SWAPCHAIN_H */
 #include <assert.h>
@@ -611,7 +635,7 @@ VkExtent2D chooseSwapExtent() {
     }
 }
 
-void createSwapChain() {
+void createswapchain() {
     VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat();
     VkPresentModeKHR presentMode = chooseSwapPresentMode();
     VkExtent2D extent = chooseSwapExtent();
@@ -664,15 +688,15 @@ void createSwapChain() {
     swapChainExtent = extent;
 }
 
-void destroySwapChain() {
+void destroyswapchain() {
     vkDestroySwapchainKHR(getDevice(), swapChain, NULL);
     free(swapChainImages);
 }
 #ifndef VULKAN_IMAGEVIEW_H
 #define VULKAN_IMAGEVIEW_H
 
-void createImageViews();
-void destroyImageViews();
+void createimageviews();
+void destroyimageviews();
 
 #endif /* VULKAN_IMAGEVIEW_H */
 #include <assert.h>
@@ -684,7 +708,7 @@ void destroyImageViews();
 
 VkImageView *swapChainImageViews;
 
-void createImageViews() {
+void createimageviews() {
     VkImage *swapChainImages = getSwapChainImages();
     uint32_t swapChainImageNum = getSwapChainImageNum();
 
@@ -712,7 +736,7 @@ void createImageViews() {
     }
 }
 
-void destroyImageViews() {
+void destroyimageviews() {
     uint32_t swapChainImageNum = getSwapChainImageNum();
 
     for (uint32_t i = 0; i < swapChainImageNum; i++) {

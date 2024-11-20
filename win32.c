@@ -15,7 +15,7 @@ static const char title[]     = L"" APPNAME;
 
 HWND hwnd;
 
-LRESULT CALLBACK
+static LRESULT CALLBACK
 WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     switch (uMsg) {
@@ -29,7 +29,7 @@ WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-int WINAPI
+static int WINAPI
 wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
     UNUSED(hPrevInstance);
@@ -63,7 +63,7 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdS
     assert(hwnd != NULL);
 
     /*  Initialise Vulkan */
-    vk_initiase();
+    vk_initialise();
 
     /*  Show the window */
     ShowWindow(hwnd, nCmdShow);
