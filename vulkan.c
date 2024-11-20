@@ -1,9 +1,10 @@
 /* Based on:
  * https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/00_Setup/00_Base_code.html
- * Rewritten for Ansi C and Win32.
+ * Drawing a triangle in Vulkan, rewritten for C99 and Win32.
  */
 
 #include <assert.h>
+#include <string.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_win32.h>
 #include <windows.h>
@@ -11,13 +12,31 @@
 #include "config.h"
 #include "win32.h"
 
-/* Macros*/
-#define NUMLAYERS (sizeof layers / sizeof layers[0])
-#define NUMEXTS   (sizeof exts   / sizeof exts[0])
+/* Macros */
+#define LAYERSCOUNT     (sizeof layers     / sizeof layers[0])
+#define EXTSCOUNT       (sizeof exts       / sizeof exts[0])
+#define DEVICEEXTSCOUNT (sizeof deviceexts / sizeof deviceexts[0])
+
+/* Types */
+
+typedef struct {
+    uint32_t graphics;
+    uint32_t present;
+    uint32_t count;
+    uint32_t isSuitable;
+} QueueFamilies;
+
+typedef struct {
+    VkSurfaceCapabilitiesKHR capabilities;
+    VkSurfaceFormatKHR *formats;
+    VkPresentModeKHR *presentmodes;
+    uint32_t formatcount;
+    uint32_t presentmodecount;
+} SwapChainSupportDetails;
 
 /* Function declarations */
 #ifdef DEBUG
-static uint32_t checkvalidationlayersupport(void);
+static uint32_t checklayersupport(void);
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 	VkDebugUtilsMessageTypeFlagsEXT messageType,
@@ -43,6 +62,10 @@ void vk_initialise(void);
 void vk_terminate(void);
 static void createinstance(void);
 static void destroyinstance(void);
+static QueueFamilies findqueuefamilies(VkPhysicalDevice device);
+static uint32_t checkdeviceext(VkPhysicalDevice device);
+static uint32_t isdevicesuitable(VkPhysicalDevice device)
+static void pickphysicaldevice(void);
 
 /* Variables */
 #ifdef DEBUG
@@ -60,28 +83,34 @@ static const char *exts[] = {
 };
 #endif /* DEBUG */
 static VkInstance instance;
+static const char *deviceexts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+static VkPhysicalDevice physicaldevice = VK_NULL_HANDLE;
+static SwapChainSupportDetails details;
+static VkDevice device;
+static VkQueue graphics;
+static VkQueue present;
 
 /* Function implementations */
 
 #ifdef DEBUG
 
 bool
-checkvalidationlayersupport(void)
+checklayersupport(void)
 {
-    uint32_t availablenum, i, j, found;
+    uint32_t availablecount, i, j, found;
     VkLayerProperties *availablelayers;
 
     /* Get available layers */
-    vkEnumerateInstanceLayerProperties(&availablenum, NULL);
-    availablelayers = (VkLayerProperties *) malloc(availablenum *
+    vkEnumerateInstanceLayerProperties(&availablecount, NULL);
+    availablelayers = (VkLayerProperties *) malloc(availablecount *
 	    sizeof(VkLayerProperties));
-    vkEnumerateInstanceLayerProperties(&availablenum, availablelayers);
+    vkEnumerateInstanceLayerProperties(&availablecount, availablelayers);
 
     /* Check if layers we need are available */
-    for (i = 0; i < NUMLAYERS; i++) {
+    for (i = 0; i < LAYERSCOUNT; i++) {
 	found = 0;
 
-	for (j = 0; j < availablenum; j++) {
+	for (j = 0; j < availablecount; j++) {
 	    if (strcmp(layers[i], availablelayers[j].layerName) == 0) {
 		found = 1;
 		break;
@@ -191,7 +220,7 @@ void
 vk_initialise(void)
 {
 #ifdef DEBUG
-    assert(checkvalidationlayersupport());
+    assert(checklayersupport());
 #endif /* DEBUG */
     createinstance();
 #ifdef DEBUG
@@ -232,9 +261,9 @@ createinstance(void)
     ci.sType            = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     ci.pApplicationInfo = &ai;
 #ifdef DEBUG
-    ci.enabledLayerCount       = NUMLAYERS;
+    ci.enabledLayerCount       = LAYERSCOUNT;
     ci.ppEnabledLayerNames     = layers;
-    ci.enabledExtensionCount   = NUMEXTS;
+    ci.enabledExtensionCount   = EXTSCOUNT;
     ci.ppEnabledExtensionNames = exts;
 
     /* Main debug messenger doesn't exist in instance creation and
@@ -252,181 +281,125 @@ destroyinstance(void)
     vkDestroyInstance(instance, NULL);
 }
 
-#ifndef VULKAN_PHYSICALDEVICE_H
-#define VULKAN_PHYSICALDEVICE_H
+QueueFamilies
+findqueuefamilies(VkPhysicalDevice device)
+{
+    uint32_t count, i;
+    QueueFamilies qf = { 0 };
+    VkQueueFamilyProperties *qfps;
+    VkBool32 support = false;
 
-#include <stdbool.h>
-#include <vulkan/vulkan.h>
-
-struct QueueFamilyIndices {
-    uint32_t graphicsFamily;
-    uint32_t presentFamily;
-    uint32_t numFamilies;
-    bool isSuitable;
-};
-
-void pickphysicaldevice();
-VkPhysicalDevice getPhysicalDevice();
-const char **getDeviceExtensions();
-uint32_t getNumDeviceExtensions();
-struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice);
-
-#endif /* VULKAN_PHYSICALDEVICE_H */
-#include <assert.h>
-#include <string.h>
-#include <vulkan/vulkan.h>
-#include "vulkan_instance.h"
-#include "vulkan_physicaldevice.h"
-#include "vulkan_surface.h"
-#include "vulkan_swapchain.h"
-
-const char *deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-
-#define NUMDEVICEEXTENSIONS (sizeof deviceExtensions / sizeof deviceExtensions[0])
-
-VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-
-VkPhysicalDevice getPhysicalDevice() {
-    return physicalDevice;
-}
-
-const char **getDeviceExtensions() {
-    return deviceExtensions;
-}
-
-uint32_t getNumDeviceExtensions() {
-    return NUMDEVICEEXTENSIONS;
-}
-
-struct QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
     /* Get available queue families */
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
-    VkQueueFamilyProperties queueFamilies[queueFamilyCount]; /* VLA */
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,
-	    queueFamilies);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &count, NULL);
+    qfps = (VkQueueFamilyProperties *) malloc(count *
+	    sizeof(VkQueueFamilyProperties));
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &count, qfps);
 
     /* Check for required queue families */
-    struct QueueFamilyIndices indices;
-    indices.isSuitable = false;
-    indices.numFamilies = 0;
-    for (uint32_t i = 0; i < queueFamilyCount; i++) {
+    for (i = 0; i < count; i++) {
 	/* Supports graphics commands */
-	if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-	    indices.graphicsFamily = i;
-	    indices.numFamilies++;
+	if (qfps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+	    qf.graphics = i;
+	    qf.count++;
 
 	    /* Supports presenting to the surface */
-	    VkBool32 presentSupport = false;
-	    vkGetPhysicalDeviceSurfaceSupportKHR(device, i, getSurface(),
-		    &presentSupport);
-	    if (presentSupport) {
-		indices.presentFamily = i;
-		indices.numFamilies++;
-		indices.isSuitable = true;
+	    vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &support);
+	    if (support) {
+		qf.present = i;
+		qf.count++;
+		qf.isSuitable = 1;
 		break;
 	    }
 	}
     }
 
-    return indices;
+    free(qfps);
+    return qf;
 }
 
-bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
+uint32_t
+checkdeviceext(VkPhysicalDevice device)
+{
+    uint32_t availablecount, i, j, found;
+    VkExtensionProperties *availableexts;
+
     /* Get available extensions */
-    uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, NULL);
-    VkExtensionProperties availableExtensions[extensionCount]; /* VLA */
-    vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount,
-	    availableExtensions);
+    vkEnumerateDeviceExtensionProperties(device, NULL, &availablecount, NULL);
+    availableexts = (VkExtensionProperties *) malloc(availablecount *
+	    sizeof(VkExtensionProperties));
+    vkEnumerateDeviceExtensionProperties(device, NULL, &availablecount,
+	    availableexts);
 
     /* Check we have required extensions */
-    for (uint32_t i = 0; i < NUMDEVICEEXTENSIONS; i++) {
-	bool extensionFound = false;
+    for (i = 0; i < DEVICEEXTSCOUNT; i++) {
+	found = 0;
 
-	for (uint32_t j = 0; j < extensionCount; j++) {
-	    if (strcmp(deviceExtensions[i],
-			availableExtensions[j].extensionName) == 0) {
-		extensionFound = true;
+	for (j = 0; j < availablecount; j++) {
+	    if (strcmp(deviceexts[i], availableexts[j].extensionName) == 0) {
+		found = 1;
 		break;
 	    }
 	}
 
-	if (extensionFound) {
+	if (found) {
 	    continue;
 	} else {
-	    return false;
+	    free(availableexts);
+	    return 0;
 	}
     }
 
-    return true;
+    free(availableexts);
+    return 1;
 }
 
-bool isDeviceSuitable(VkPhysicalDevice device) {
-    struct QueueFamilyIndices indices = findQueueFamilies(device);
-    bool extensionsSupported = checkDeviceExtensionSupport(device);
+uint32_t
+isdevicesuitable(VkPhysicalDevice device)
+{
+    QueueFamilies qf = findqueuefamilies(device);
+    uint32_t extssupport = checkdeviceext(device);
+    uint32_t swapchainadequate = 0;
 
-    bool swapChainAdequate = false;
-    if (extensionsSupported) {
-	querySwapChainSupport(device, getSurface());
-	struct SwapChainSupportDetails details = getDetails();
-	swapChainAdequate = details.formats != NULL &&
-	    details.presentModes != NULL;
+    if (extssupport) {
+	queryswapchainsupport(device, surface);
+	swapchainadequate =
+	    details.formats      != NULL &&
+	    details.presentmodes != NULL;
     }
 
-    return indices.isSuitable && extensionsSupported && swapChainAdequate;
+    return qf.isSuitable && extssupport && swapchainadequate;
 }
 
-void pickphysicaldevice() {
+void
+pickphysicaldevice(void)
+{
+    uint32_t devicecount, i;
+    VkPhysicalDevice *devices;
+
     /* Get available physical devices */
-    uint32_t deviceCount;
-    VkInstance instance = instance;
-    vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
-    assert(deviceCount > 0);
-    VkPhysicalDevice devices[deviceCount]; /* VLA */
-    vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
+    vkEnumeratePhysicalDevices(instance, &devicecount, NULL);
+    assert(devicecount > 0);
+    devices = (VkPhysicalDevice *) malloc(devicecount *
+	    sizeof(VkPhysicalDevice));
+    vkEnumeratePhysicalDevices(instance, &devicecount, devices);
 
     /* Select the first suitable device */
-    for (uint32_t i = 0; i < deviceCount; i++) {
-	if (isDeviceSuitable(devices[i])) {
-	    physicalDevice = devices[i];
+    for (i = 0; i < devicecount; i++) {
+	if (isdevicesuitable(devices[i])) {
+	    physicaldevice = devices[i];
 	    break;
 	}
     }
 
-    assert(physicalDevice != VK_NULL_HANDLE);
-}
-#ifndef VULKAN_DEVICE_H
-#define VULKAN_DEVICE_H
-
-#include <vulkan/vulkan.h>
-
-VkDevice getDevice();
-void createlogicaldevice();
-void destroylogicaldevice();
-
-#endif /* VULKAN_DEVICE_H */
-#include <assert.h>
-#include <vulkan/vulkan.h>
-#include "util.h"
-#include "vulkan_device.h"
-#include "vulkan_instance.h"
-#include "vulkan_physicaldevice.h"
-
-VkDevice device;
-VkQueue graphicsQueue;
-VkQueue presentQueue;
-
-VkDevice getDevice() {
-    return device;
+    assert(physicaldevice != VK_NULL_HANDLE);
 }
 
 void createlogicaldevice() {
     /* Create a queue for each queue family */
-    struct QueueFamilyIndices indices = findQueueFamilies(getPhysicalDevice());
-    VkDeviceQueueCreateInfo queueCreateInfos[indices.numFamilies] = {}; /* VLA */
+    QueueFamilies indices = findqueuefamilies(getPhysicalDevice());
+    VkDeviceQueueCreateInfo queueCreateInfos[indices.count] = {}; /* VLA */
     float queuePriority = 1.0f;
-    for (uint32_t i = 0; i < indices.numFamilies; i++) {
+    for (uint32_t i = 0; i < indices.count; i++) {
 	queueCreateInfos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 	queueCreateInfos[i].queueFamilyIndex = i;
 	queueCreateInfos[i].queueCount = 1;
@@ -439,19 +412,19 @@ void createlogicaldevice() {
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.pQueueCreateInfos = queueCreateInfos;
-    createInfo.queueCreateInfoCount = indices.numFamilies;
+    createInfo.queueCreateInfoCount = indices.count;
     createInfo.pEnabledFeatures = &deviceFeatures;
     createInfo.enabledExtensionCount = getNumDeviceExtensions();
     createInfo.ppEnabledExtensionNames = getDeviceExtensions();
 #ifdef DEBUG
-    createInfo.enabledLayerCount = NUMLAYERS;
+    createInfo.enabledLayerCount = LAYERSCOUNT;
     createInfo.ppEnabledLayerNames = validationlayers;
 #endif /* DEBUG */
     assert(vkCreateDevice(getPhysicalDevice(), &createInfo, NULL, &device) == VK_SUCCESS);
 
     /* Get the queues */
-    vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
-    vkGetDeviceQueue(device, indices.presentFamily, 0, &presentQueue);
+    vkGetDeviceQueue(device, indices.graphics, 0, &graphics);
+    vkGetDeviceQueue(device, indices.present, 0, &present);
 }
 
 void destroylogicaldevice() {
@@ -498,22 +471,6 @@ void destroysurface() {
 
 #include <vulkan/vulkan.h>
 
-struct SwapChainSupportDetails {
-    VkSurfaceCapabilitiesKHR capabilities;
-    VkSurfaceFormatKHR *formats;
-    VkPresentModeKHR *presentModes;
-    uint32_t formatCount;
-    uint32_t presentModeCount;
-};
-
-struct SwapChainSupportDetails getDetails();
-VkImage *getSwapChainImages();
-uint32_t getSwapChainImageNum();
-VkFormat getSwapChainImageFormat();
-void querySwapChainSupport(VkPhysicalDevice, VkSurfaceKHR);
-void freeSwapChainSupport();
-void createswapchain();
-void destroyswapchain();
 
 #endif /* VULKAN_SWAPCHAIN_H */
 #include <assert.h>
@@ -526,17 +483,11 @@ void destroyswapchain();
 #include "vulkan_swapchain.h"
 #include "win32.h"
 
-struct SwapChainSupportDetails details;
-
 VkSwapchainKHR swapChain;
 VkImage *swapChainImages;
 uint32_t swapChainImageNum;
 VkFormat swapChainImageFormat;
 VkExtent2D swapChainExtent;
-
-struct SwapChainSupportDetails getDetails() {
-    return details;
-}
 
 VkImage *getSwapChainImages() {
     return swapChainImages;
@@ -550,40 +501,40 @@ VkFormat getSwapChainImageFormat() {
     return swapChainImageFormat;
 }
 
-void querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
+void queryswapchainsupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
     /* Get basic surface capabilities */
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface,
 	    &details.capabilities);
 
     /* Get supported surface formats */
     vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface,
-	    &details.formatCount, NULL);
-    if (details.formatCount > 0) {
-	details.formats = (VkSurfaceFormatKHR *) malloc(details.formatCount *
+	    &details.formatcount, NULL);
+    if (details.formatcount > 0) {
+	details.formats = (VkSurfaceFormatKHR *) malloc(details.formatcount *
 		sizeof(VkSurfaceFormatKHR));
 	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface,
-		&details.formatCount, details.formats);
+		&details.formatcount, details.formats);
     }
 
     /* Get supported presentation modes */
     vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface,
-	    &details.presentModeCount, NULL);
-    if (details.presentModeCount > 0) {
-	details.presentModes =
-	    (VkPresentModeKHR *) malloc(details.presentModeCount *
+	    &details.presentmodecount, NULL);
+    if (details.presentmodecount > 0) {
+	details.presentmodes =
+	    (VkPresentModeKHR *) malloc(details.presentmodecount *
 		    sizeof(VkPresentModeKHR));
 	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface,
-		&details.presentModeCount, details.presentModes);
+		&details.presentmodecount, details.presentmodes);
     }
 }
 
 void freeSwapChainSupport() {
     free(details.formats);
-    free(details.presentModes);
+    free(details.presentmodes);
 }
 
 VkSurfaceFormatKHR chooseSwapSurfaceFormat() {
-    for (uint32_t i = 0; i < details.formatCount; i++) {
+    for (uint32_t i = 0; i < details.formatcount; i++) {
 	if (details.formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
 		details.formats[i].colorSpace ==
 		VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
@@ -595,9 +546,9 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat() {
 }
 
 VkPresentModeKHR chooseSwapPresentMode() {
-    for (uint32_t i = 0; i < details.presentModeCount; i++) {
-        if (details.presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-            return details.presentModes[i];
+    for (uint32_t i = 0; i < details.presentmodecount; i++) {
+        if (details.presentmodes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+            return details.presentmodes[i];
         }
     }
 
@@ -659,10 +610,10 @@ void createswapchain() {
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
     /* Use exclusive if the queue families are the same */
-    struct QueueFamilyIndices indices = findQueueFamilies(getPhysicalDevice());
-    uint32_t queueFamilyIndices[] = { indices.graphicsFamily,
-	indices.presentFamily };
-    if (indices.graphicsFamily == indices.presentFamily) {
+    QueueFamilies indices = findqueuefamilies(getPhysicalDevice());
+    uint32_t queueFamilyIndices[] = { indices.graphics,
+	indices.present };
+    if (indices.graphics == indices.present) {
 	createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     } else {
 	createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
