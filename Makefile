@@ -18,8 +18,7 @@ $(BIN): $(OBJ)
 %.o: %.c
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $<
 
-vulkan.c: config.h win32.h
-win32.c: config.h util.h vulkan.h win32.h
+vulkan.c win32.c: config.h util.h vulkan.h win32.h
 
 clean:
 	@rm -f $(BIN) $(OBJ)

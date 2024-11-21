@@ -12,6 +12,7 @@
 
 #include "config.h"
 #include "util.h"
+#include "vulkan.h"
 #include "win32.h"
 
 /* Macros */
@@ -69,19 +70,17 @@ static void populatedebugci(VkDebugUtilsMessengerCreateInfoEXT *ci);
 static void createdebugmessenger(void);
 static void destroydebugmessenger(void);
 #endif // DEBUG
-void vk_initialise(void);
-void vk_terminate(void);
 static void createinstance(void);
 static void destroyinstance(void);
-static QueueFamilies findqueuefamilies(VkPhysicalDevice device);
-static uint32_t checkdeviceext(VkPhysicalDevice device);
-static uint32_t isdevicesuitable(VkPhysicalDevice device);
+static QueueFamilies findqueuefamilies(VkPhysicalDevice pd);
+static uint32_t checkdeviceext(VkPhysicalDevice pd);
+static uint32_t isdevicesuitable(VkPhysicalDevice pd);
 static void pickphysicaldevice(void);
 static void createlogicaldevice(void);
 static void destroylogicaldevice(void);
 static void createsurface(void);
 static void destroysurface(void);
-static void queryswapchainsupport(VkPhysicalDevice device, VkSurfaceKHR surface);
+static void queryswapchainsupport(VkPhysicalDevice pd, VkSurfaceKHR surface);
 static void freeswapchaindetails(void);
 static VkSurfaceFormatKHR chooseswapspaceformat(void);
 static VkPresentModeKHR chooseswappresentmode(void);
@@ -212,8 +211,8 @@ void
 populatedebugci(VkDebugUtilsMessengerCreateInfoEXT *ci) {
     ci->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     ci->messageSeverity =
-	//VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-	//VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+	/*VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+	VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |*/
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
     ci->messageType =
@@ -308,7 +307,7 @@ destroyinstance(void)
 }
 
 QueueFamilies
-findqueuefamilies(VkPhysicalDevice device)
+findqueuefamilies(VkPhysicalDevice pd)
 {
     uint32_t count, i;
     QueueFamilies qf = { 0 };
@@ -316,10 +315,10 @@ findqueuefamilies(VkPhysicalDevice device)
     VkBool32 support;
 
     /* Get available queue families */
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &count, NULL);
+    vkGetPhysicalDeviceQueueFamilyProperties(pd, &count, NULL);
     qfps = (VkQueueFamilyProperties *) malloc(count *
 	    sizeof(VkQueueFamilyProperties));
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &count, qfps);
+    vkGetPhysicalDeviceQueueFamilyProperties(pd, &count, qfps);
 
     /* Check for required queue families */
     for (i = 0; i < count; i++) {
@@ -329,7 +328,7 @@ findqueuefamilies(VkPhysicalDevice device)
 	    qf.count++;
 
 	    /* Supports presenting to the surface */
-	    vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &support);
+	    vkGetPhysicalDeviceSurfaceSupportKHR(pd, i, surface, &support);
 	    if (support) {
 		qf.present = i;
 		qf.count++;
@@ -344,16 +343,16 @@ findqueuefamilies(VkPhysicalDevice device)
 }
 
 uint32_t
-checkdeviceext(VkPhysicalDevice device)
+checkdeviceext(VkPhysicalDevice pd)
 {
     uint32_t availablecount, i, j, found;
     VkExtensionProperties *availableexts;
 
     /* Get available extensions */
-    vkEnumerateDeviceExtensionProperties(device, NULL, &availablecount, NULL);
+    vkEnumerateDeviceExtensionProperties(pd, NULL, &availablecount, NULL);
     availableexts = (VkExtensionProperties *) malloc(availablecount *
 	    sizeof(VkExtensionProperties));
-    vkEnumerateDeviceExtensionProperties(device, NULL, &availablecount,
+    vkEnumerateDeviceExtensionProperties(pd, NULL, &availablecount,
 	    availableexts);
 
     /* Check we have required extensions */
@@ -380,14 +379,14 @@ checkdeviceext(VkPhysicalDevice device)
 }
 
 uint32_t
-isdevicesuitable(VkPhysicalDevice device)
+isdevicesuitable(VkPhysicalDevice pd)
 {
-    QueueFamilies qf = findqueuefamilies(physicaldevice);
-    uint32_t extssupport = checkdeviceext(device);
+    QueueFamilies qf = findqueuefamilies(pd);
+    uint32_t extssupport = checkdeviceext(pd);
     uint32_t swapchainadequate = 0;
 
     if (extssupport) {
-	queryswapchainsupport(device, surface);
+	queryswapchainsupport(pd, surface);
 	swapchainadequate =
 	    details.formats      != NULL &&
 	    details.presentmodes != NULL;
@@ -399,25 +398,24 @@ isdevicesuitable(VkPhysicalDevice device)
 void
 pickphysicaldevice(void)
 {
-    uint32_t devicecount, i;
-    VkPhysicalDevice *devices;
+    uint32_t pdcount, i;
+    VkPhysicalDevice *pds;
 
     /* Get available physical devices */
-    vkEnumeratePhysicalDevices(instance, &devicecount, NULL);
-    assert(devicecount > 0);
-    devices = (VkPhysicalDevice *) malloc(devicecount *
-	    sizeof(VkPhysicalDevice));
-    vkEnumeratePhysicalDevices(instance, &devicecount, devices);
+    vkEnumeratePhysicalDevices(instance, &pdcount, NULL);
+    assert(pdcount > 0);
+    pds = (VkPhysicalDevice *) malloc(pdcount * sizeof(VkPhysicalDevice));
+    vkEnumeratePhysicalDevices(instance, &pdcount, pds);
 
     /* Select the first suitable device */
-    for (i = 0; i < devicecount; i++) {
-	if (isdevicesuitable(devices[i])) {
-	    physicaldevice = devices[i];
+    for (i = 0; i < pdcount; i++) {
+	if (isdevicesuitable(pds[i])) {
+	    physicaldevice = pds[i];
 	    break;
 	}
     }
 
-    free(devices);
+    free(pds);
     assert(physicaldevice != VK_NULL_HANDLE);
 }
 
