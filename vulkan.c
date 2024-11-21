@@ -32,7 +32,15 @@ typedef struct {
     VkPresentModeKHR *presentmodes;
     uint32_t formatcount;
     uint32_t presentmodecount;
-} SwapChainSupportDetails;
+} SwapChainDetails;
+
+typedef struct {
+    VkSwapchainKHR swapchain;
+    VkImage *images;
+    uint32_t imagecount;
+    VkFormat imageformat;
+    VkExtent2D extent;
+} SwapChain;
 
 /* Function declarations */
 #ifdef DEBUG
@@ -66,6 +74,15 @@ static QueueFamilies findqueuefamilies(VkPhysicalDevice device);
 static uint32_t checkdeviceext(VkPhysicalDevice device);
 static uint32_t isdevicesuitable(VkPhysicalDevice device)
 static void pickphysicaldevice(void);
+static void createlogicaldevice(void);
+static void destroylogicaldevice(void);
+static void createsurface(void);
+static void destroysurface(void);
+static void queryswapchainsupport(VkPhysicalDevice device, VkSurfaceKHR surface);
+static void freeswapchainssupport(void);
+static VkSurfaceFormatKHR chooseswapspaceformat(void);
+static VkPresentModeKHR chooseswappresentmode(void);
+static VkExtent2D chooseSwapExtent(void);
 
 /* Variables */
 #ifdef DEBUG
@@ -85,10 +102,11 @@ static const char *exts[] = {
 static VkInstance instance;
 static const char *deviceexts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 static VkPhysicalDevice physicaldevice = VK_NULL_HANDLE;
-static SwapChainSupportDetails details;
+static SwapChainDetails details;
 static VkDevice device;
 static VkQueue graphics;
 static VkQueue present;
+static VkSurfaceKHR surface;
 
 /* Function implementations */
 
@@ -391,117 +409,75 @@ pickphysicaldevice(void)
 	}
     }
 
+    free(devices);
     assert(physicaldevice != VK_NULL_HANDLE);
 }
 
-void createlogicaldevice() {
+void
+createlogicaldevice(void)
+{
+    uint32_t i;
+    QueueFamilies qfs = findqueuefamilies(device);
+    const float prio = 1.0f;
+    VkDeviceQueueCreateInfo *cis = (VkDeviceQueueCreateInfo *)
+	calloc(qfs.count, sizeof(VkDeviceQueueCreateInfo));
+    VkPhysicalDeviceFeatures df = { 0 };
+    VkDeviceCreateInfo ci = { 0 };
+
     /* Create a queue for each queue family */
-    QueueFamilies indices = findqueuefamilies(getPhysicalDevice());
-    VkDeviceQueueCreateInfo queueCreateInfos[indices.count] = {}; /* VLA */
-    float queuePriority = 1.0f;
-    for (uint32_t i = 0; i < indices.count; i++) {
-	queueCreateInfos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	queueCreateInfos[i].queueFamilyIndex = i;
-	queueCreateInfos[i].queueCount = 1;
-	queueCreateInfos[i].pQueuePriorities = &queuePriority;
+    for (i = 0; i < qfs.count; i++) {
+	cis[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	cis[i].queueFamilyIndex = i;
+	cis[i].queueCount = 1;
+	cis[i].pQueuePriorities = &prio;
     }
 
-    VkPhysicalDeviceFeatures deviceFeatures = {};
-    
     /* Create the logical device */
-    VkDeviceCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.pQueueCreateInfos = queueCreateInfos;
-    createInfo.queueCreateInfoCount = indices.count;
-    createInfo.pEnabledFeatures = &deviceFeatures;
-    createInfo.enabledExtensionCount = getNumDeviceExtensions();
-    createInfo.ppEnabledExtensionNames = getDeviceExtensions();
+    ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    ci.pQueueCreateInfos = cis;
+    ci.queueCreateInfoCount = qfs.count;
+    ci.pEnabledFeatures = &df;
+    ci.enabledExtensionCount = DEVICEEXTSCOUNT;
+    ci.ppEnabledExtensionNames = deviceexts;
 #ifdef DEBUG
-    createInfo.enabledLayerCount = LAYERSCOUNT;
-    createInfo.ppEnabledLayerNames = validationlayers;
+    ci.enabledLayerCount = LAYERSCOUNT;
+    ci.ppEnabledLayerNames = layers;
 #endif /* DEBUG */
-    assert(vkCreateDevice(getPhysicalDevice(), &createInfo, NULL, &device) == VK_SUCCESS);
+    assert(vkCreateDevice(device, &ci, NULL, &device) == VK_SUCCESS);
 
     /* Get the queues */
-    vkGetDeviceQueue(device, indices.graphics, 0, &graphics);
-    vkGetDeviceQueue(device, indices.present, 0, &present);
+    vkGetDeviceQueue(device, qfs.graphics, 0, &graphics);
+    vkGetDeviceQueue(device, qfs.present, 0, &present);
 }
 
-void destroylogicaldevice() {
+void
+destroylogicaldevice(void)
+{
     vkDestroyDevice(device, NULL);
 }
-#ifndef VULKAN_SURFACE_H
-#define VULKAN_SURFACE_H
 
-#include <vulkan/vulkan.h>
+void
+createsurface(void)
+{
+    VkWin32SurfaceCreateInfoKHR ci = { 0 };
 
-VkSurfaceKHR getSurface();
-void createsurface();
-void destroysurface();
+    ci.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+    ci.hwnd = hwnd;
+    ci.hinstance = GetModuleHandle(NULL);
 
-#endif /* VULKAN_SURFACE_H */
-#include <assert.h>
-#include <windows.h>
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_win32.h>
-#include "vulkan_instance.h"
-#include "vulkan_surface.h"
-#include "win32.h"
-
-VkSurfaceKHR surface;
-
-VkSurfaceKHR getSurface() {
-    return surface;
+    assert(vkCreateWin32SurfaceKHR(instance, &ci, NULL, &surface) ==
+	    VK_SUCCESS);
 }
 
-void createsurface() {
-    VkWin32SurfaceCreateInfoKHR createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-    createInfo.hwnd = hwnd;
-    createInfo.hinstance = GetModuleHandle(NULL);
-
-    assert(vkCreateWin32SurfaceKHR(instance, &createInfo, NULL, &surface) == VK_SUCCESS);
-}
-
-void destroysurface() {
+void
+destroysurface(void)
+{
     vkDestroySurfaceKHR(instance, surface, NULL);
 }
-#ifndef VULKAN_SWAPCHAIN_H
-#define VULKAN_SWAPCHAIN_H
 
-#include <vulkan/vulkan.h>
-
-
-#endif /* VULKAN_SWAPCHAIN_H */
-#include <assert.h>
-#include <stdlib.h>
-#include <windows.h>
-#include <vulkan/vulkan.h>
-#include "vulkan_device.h"
-#include "vulkan_physicaldevice.h"
-#include "vulkan_surface.h"
-#include "vulkan_swapchain.h"
-#include "win32.h"
-
-VkSwapchainKHR swapChain;
-VkImage *swapChainImages;
-uint32_t swapChainImageNum;
-VkFormat swapChainImageFormat;
-VkExtent2D swapChainExtent;
-
-VkImage *getSwapChainImages() {
-    return swapChainImages;
-}
-
-uint32_t getSwapChainImageNum() {
-    return swapChainImageNum;
-}
-
-VkFormat getSwapChainImageFormat() {
-    return swapChainImageFormat;
-}
-
-void queryswapchainsupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
+void
+queryswapchainsupport(VkPhysicalDevice device, VkSurfaceKHR surface)
+{
     /* Get basic surface capabilities */
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface,
 	    &details.capabilities);
@@ -528,13 +504,19 @@ void queryswapchainsupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
     }
 }
 
-void freeSwapChainSupport() {
+void
+freeswapchainssupport(void)
+{
     free(details.formats);
     free(details.presentmodes);
 }
 
-VkSurfaceFormatKHR chooseSwapSurfaceFormat() {
-    for (uint32_t i = 0; i < details.formatcount; i++) {
+VkSurfaceFormatKHR
+chooseswapspaceformat(void)
+{
+    uint32_t i;
+
+    for (i = 0; i < details.formatcount; i++) {
 	if (details.formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
 		details.formats[i].colorSpace ==
 		VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
@@ -545,8 +527,12 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat() {
     return details.formats[0];
 }
 
-VkPresentModeKHR chooseSwapPresentMode() {
-    for (uint32_t i = 0; i < details.presentmodecount; i++) {
+VkPresentModeKHR
+chooseswappresentmode(void)
+{
+    uint32_t i;
+
+    for (i = 0; i < details.presentmodecount; i++) {
         if (details.presentmodes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
             return details.presentmodes[i];
         }
@@ -555,7 +541,9 @@ VkPresentModeKHR chooseSwapPresentMode() {
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-VkExtent2D chooseSwapExtent() {
+VkExtent2D
+chooseSwapExtent(void)
+{
     VkExtent2D actualExtent;
     RECT rcClient;
     const uint32_t minWidth  = details.capabilities.minImageExtent.width;
@@ -587,8 +575,8 @@ VkExtent2D chooseSwapExtent() {
 }
 
 void createswapchain() {
-    VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat();
-    VkPresentModeKHR presentMode = chooseSwapPresentMode();
+    VkSurfaceFormatKHR surfaceFormat = chooseswapspaceformat();
+    VkPresentModeKHR presentMode = chooseswappresentmode();
     VkExtent2D extent = chooseSwapExtent();
 
     uint32_t imageCount = details.capabilities.minImageCount + 1;
@@ -628,7 +616,7 @@ void createswapchain() {
     createInfo.oldSwapchain = VK_NULL_HANDLE;
 
     assert(vkCreateSwapchainKHR(getDevice(), &createInfo, NULL, &swapChain) == VK_SUCCESS);
-    freeSwapChainSupport();
+    freeswapchainssupport();
 
     vkGetSwapchainImagesKHR(getDevice(), swapChain, &imageCount, NULL);
     swapChainImages = (VkImage *) malloc(imageCount * sizeof(VkImage));
