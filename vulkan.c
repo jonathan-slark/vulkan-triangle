@@ -4,12 +4,14 @@
  */
 
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_win32.h>
 #include <windows.h>
 
 #include "config.h"
+#include "util.h"
 #include "win32.h"
 
 /* Macros */
@@ -35,11 +37,12 @@ typedef struct {
 } SwapChainDetails;
 
 typedef struct {
-    VkSwapchainKHR swapchain;
+    VkSwapchainKHR handle;
     VkImage *images;
     uint32_t imagecount;
     VkFormat imageformat;
     VkExtent2D extent;
+    VkImageView *imageviews;
 } SwapChain;
 
 /* Function declarations */
@@ -72,17 +75,21 @@ static void createinstance(void);
 static void destroyinstance(void);
 static QueueFamilies findqueuefamilies(VkPhysicalDevice device);
 static uint32_t checkdeviceext(VkPhysicalDevice device);
-static uint32_t isdevicesuitable(VkPhysicalDevice device)
+static uint32_t isdevicesuitable(VkPhysicalDevice device);
 static void pickphysicaldevice(void);
 static void createlogicaldevice(void);
 static void destroylogicaldevice(void);
 static void createsurface(void);
 static void destroysurface(void);
 static void queryswapchainsupport(VkPhysicalDevice device, VkSurfaceKHR surface);
-static void freeswapchainssupport(void);
+static void freeswapchaindetails(void);
 static VkSurfaceFormatKHR chooseswapspaceformat(void);
 static VkPresentModeKHR chooseswappresentmode(void);
-static VkExtent2D chooseSwapExtent(void);
+static VkExtent2D chooseswapextent(void);
+static void createswapchain(void);
+static void destroyswapchain(void);
+static void createimageviews(void);
+static void destroyimageviews(void);
 
 /* Variables */
 #ifdef DEBUG
@@ -99,20 +106,21 @@ static const char *exts[] = {
     VK_KHR_WIN32_SURFACE_EXTENSION_NAME
 };
 #endif /* DEBUG */
-static VkInstance instance;
 static const char *deviceexts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+static VkInstance instance;
 static VkPhysicalDevice physicaldevice = VK_NULL_HANDLE;
 static SwapChainDetails details;
 static VkDevice device;
 static VkQueue graphics;
 static VkQueue present;
 static VkSurfaceKHR surface;
+static SwapChain swapchain;
 
 /* Function implementations */
 
 #ifdef DEBUG
 
-bool
+uint32_t
 checklayersupport(void)
 {
     uint32_t availablecount, i, j, found;
@@ -305,7 +313,7 @@ findqueuefamilies(VkPhysicalDevice device)
     uint32_t count, i;
     QueueFamilies qf = { 0 };
     VkQueueFamilyProperties *qfps;
-    VkBool32 support = false;
+    VkBool32 support;
 
     /* Get available queue families */
     vkGetPhysicalDeviceQueueFamilyProperties(device, &count, NULL);
@@ -374,7 +382,7 @@ checkdeviceext(VkPhysicalDevice device)
 uint32_t
 isdevicesuitable(VkPhysicalDevice device)
 {
-    QueueFamilies qf = findqueuefamilies(device);
+    QueueFamilies qf = findqueuefamilies(physicaldevice);
     uint32_t extssupport = checkdeviceext(device);
     uint32_t swapchainadequate = 0;
 
@@ -417,15 +425,15 @@ void
 createlogicaldevice(void)
 {
     uint32_t i;
-    QueueFamilies qfs = findqueuefamilies(device);
+    QueueFamilies qf = findqueuefamilies(physicaldevice);
     const float prio = 1.0f;
     VkDeviceQueueCreateInfo *cis = (VkDeviceQueueCreateInfo *)
-	calloc(qfs.count, sizeof(VkDeviceQueueCreateInfo));
+	calloc(qf.count, sizeof(VkDeviceQueueCreateInfo));
     VkPhysicalDeviceFeatures df = { 0 };
     VkDeviceCreateInfo ci = { 0 };
 
     /* Create a queue for each queue family */
-    for (i = 0; i < qfs.count; i++) {
+    for (i = 0; i < qf.count; i++) {
 	cis[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 	cis[i].queueFamilyIndex = i;
 	cis[i].queueCount = 1;
@@ -435,7 +443,7 @@ createlogicaldevice(void)
     /* Create the logical device */
     ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     ci.pQueueCreateInfos = cis;
-    ci.queueCreateInfoCount = qfs.count;
+    ci.queueCreateInfoCount = qf.count;
     ci.pEnabledFeatures = &df;
     ci.enabledExtensionCount = DEVICEEXTSCOUNT;
     ci.ppEnabledExtensionNames = deviceexts;
@@ -443,11 +451,11 @@ createlogicaldevice(void)
     ci.enabledLayerCount = LAYERSCOUNT;
     ci.ppEnabledLayerNames = layers;
 #endif /* DEBUG */
-    assert(vkCreateDevice(device, &ci, NULL, &device) == VK_SUCCESS);
+    assert(vkCreateDevice(physicaldevice, &ci, NULL, &device) == VK_SUCCESS);
 
     /* Get the queues */
-    vkGetDeviceQueue(device, qfs.graphics, 0, &graphics);
-    vkGetDeviceQueue(device, qfs.present, 0, &present);
+    vkGetDeviceQueue(device, qf.graphics, 0, &graphics);
+    vkGetDeviceQueue(device, qf.present, 0, &present);
 }
 
 void
@@ -505,7 +513,7 @@ queryswapchainsupport(VkPhysicalDevice device, VkSurfaceKHR surface)
 }
 
 void
-freeswapchainssupport(void)
+freeswapchaindetails(void)
 {
     free(details.formats);
     free(details.presentmodes);
@@ -542,145 +550,137 @@ chooseswappresentmode(void)
 }
 
 VkExtent2D
-chooseSwapExtent(void)
+chooseswapextent(void)
 {
-    VkExtent2D actualExtent;
+    VkExtent2D extent;
     RECT rcClient;
-    const uint32_t minWidth  = details.capabilities.minImageExtent.width;
-    const uint32_t maxWidth  = details.capabilities.maxImageExtent.width;
-    const uint32_t minHeight = details.capabilities.minImageExtent.height;
-    const uint32_t maxHeight = details.capabilities.maxImageExtent.height;
+    const uint32_t minwidth  = details.capabilities.minImageExtent.width;
+    const uint32_t maxwidth  = details.capabilities.maxImageExtent.width;
+    const uint32_t minheight = details.capabilities.minImageExtent.height;
+    const uint32_t maxheight = details.capabilities.maxImageExtent.height;
 
     /* Check if width and height don't match the resolution */
     if (details.capabilities.currentExtent.width == UINT32_MAX) {
 	GetClientRect(hwnd, &rcClient);
-	actualExtent.width = rcClient.right;
-	actualExtent.height = rcClient.bottom;
+	extent.width = rcClient.right;
+	extent.height = rcClient.bottom;
 
-	if (actualExtent.width < minWidth) {
-	    actualExtent.width = minWidth;
-	} else if (actualExtent.width > maxWidth) {
-	    actualExtent.width = maxWidth;
+	if (extent.width < minwidth) {
+	    extent.width = minwidth;
+	} else if (extent.width > maxwidth) {
+	    extent.width = maxwidth;
 	}
-	if (actualExtent.height < minHeight) {
-	    actualExtent.height = minHeight;
-	} else if (actualExtent.height > maxHeight) {
-	    actualExtent.height = maxHeight;
+	if (extent.height < minheight) {
+	    extent.height = minheight;
+	} else if (extent.height > maxheight) {
+	    extent.height = maxheight;
 	}
 
-	return actualExtent;
+	return extent;
     } else {
 	return details.capabilities.currentExtent;
     }
 }
 
-void createswapchain() {
-    VkSurfaceFormatKHR surfaceFormat = chooseswapspaceformat();
-    VkPresentModeKHR presentMode = chooseswappresentmode();
-    VkExtent2D extent = chooseSwapExtent();
+void
+createswapchain(void)
+{
+    uint32_t imagecount = details.capabilities.minImageCount + 1;
+    const VkSurfaceFormatKHR sf = chooseswapspaceformat();
+    const VkPresentModeKHR pm = chooseswappresentmode();
+    const VkExtent2D extent = chooseswapextent();
+    const uint32_t maximagecount = details.capabilities.maxImageCount;
+    VkSwapchainCreateInfoKHR ci = { 0 };
+    const QueueFamilies qf = findqueuefamilies(physicaldevice);
+    const uint32_t qfi[] = { qf.graphics, qf.present };
 
-    uint32_t imageCount = details.capabilities.minImageCount + 1;
-    const uint32_t maxImageCount = details.capabilities.maxImageCount;
-    if (maxImageCount > 0 && imageCount > maxImageCount) {
-	imageCount = maxImageCount;
+    if (maximagecount > 0 && imagecount > maximagecount) {
+	imagecount = maximagecount;
     }
 
-    VkSwapchainCreateInfoKHR createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    createInfo.surface = getSurface();
+    ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    ci.surface = surface;
 
     /* Swap chain images */
-    createInfo.minImageCount = imageCount;
-    createInfo.imageFormat = surfaceFormat.format;
-    createInfo.imageColorSpace = surfaceFormat.colorSpace;
-    createInfo.imageExtent = extent;
-    createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    ci.minImageCount = imagecount;
+    ci.imageFormat = sf.format;
+    ci.imageColorSpace = sf.colorSpace;
+    ci.imageExtent = extent;
+    ci.imageArrayLayers = 1;
+    ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
     /* Use exclusive if the queue families are the same */
-    QueueFamilies indices = findqueuefamilies(getPhysicalDevice());
-    uint32_t queueFamilyIndices[] = { indices.graphics,
-	indices.present };
-    if (indices.graphics == indices.present) {
-	createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (qf.graphics == qf.present) {
+	ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     } else {
-	createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-	createInfo.queueFamilyIndexCount = 2;
-	createInfo.pQueueFamilyIndices = queueFamilyIndices;
+	ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+	ci.queueFamilyIndexCount = 2;
+	ci.pQueueFamilyIndices = qfi;
     }
 
-    createInfo.preTransform = details.capabilities.currentTransform;
-    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    createInfo.presentMode = presentMode;
-    createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = VK_NULL_HANDLE;
+    ci.preTransform = details.capabilities.currentTransform;
+    ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    ci.presentMode = pm;
+    ci.clipped = VK_TRUE;
+    ci.oldSwapchain = VK_NULL_HANDLE;
 
-    assert(vkCreateSwapchainKHR(getDevice(), &createInfo, NULL, &swapChain) == VK_SUCCESS);
-    freeswapchainssupport();
+    assert(vkCreateSwapchainKHR(device, &ci, NULL, &swapchain.handle) == VK_SUCCESS);
+    freeswapchaindetails();
 
-    vkGetSwapchainImagesKHR(getDevice(), swapChain, &imageCount, NULL);
-    swapChainImages = (VkImage *) malloc(imageCount * sizeof(VkImage));
-    swapChainImageNum = imageCount;
-    vkGetSwapchainImagesKHR(getDevice(), swapChain, &imageCount, swapChainImages);
+    vkGetSwapchainImagesKHR(device, swapchain.handle, &imagecount, NULL);
+    swapchain.images = (VkImage *) malloc(imagecount * sizeof(VkImage));
+    swapchain.imagecount = imagecount;
+    vkGetSwapchainImagesKHR(device, swapchain.handle, &imagecount,
+	    swapchain.images);
 
-    swapChainImageFormat = surfaceFormat.format;
-    swapChainExtent = extent;
+    swapchain.imageformat = sf.format;
+    swapchain.extent = extent;
 }
 
-void destroyswapchain() {
-    vkDestroySwapchainKHR(getDevice(), swapChain, NULL);
-    free(swapChainImages);
+void
+destroyswapchain(void)
+{
+    vkDestroySwapchainKHR(device, swapchain.handle, NULL);
+    free(swapchain.images);
 }
-#ifndef VULKAN_IMAGEVIEW_H
-#define VULKAN_IMAGEVIEW_H
 
-void createimageviews();
-void destroyimageviews();
+void
+createimageviews(void)
+{
+    uint32_t i;
+    VkImageViewCreateInfo ci = { 0 };
 
-#endif /* VULKAN_IMAGEVIEW_H */
-#include <assert.h>
-#include <stdlib.h>
-#include <vulkan/vulkan.h>
-#include "vulkan_device.h"
-#include "vulkan_imageview.h"
-#include "vulkan_swapchain.h"
-
-VkImageView *swapChainImageViews;
-
-void createimageviews() {
-    VkImage *swapChainImages = getSwapChainImages();
-    uint32_t swapChainImageNum = getSwapChainImageNum();
-
-    swapChainImageViews = (VkImageView *) malloc(swapChainImageNum *
+    swapchain.imageviews = (VkImageView *) malloc(swapchain.imagecount *
 	    sizeof(VkImageView));
 
-    for (uint32_t i = 0; i < swapChainImageNum; i++) {
-	VkImageViewCreateInfo createInfo = {};
-	createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	createInfo.image = swapChainImages[i];
-	createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	createInfo.format = getSwapChainImageFormat();
-	createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-	createInfo.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-	createInfo.subresourceRange.baseMipLevel   = 0;
-	createInfo.subresourceRange.levelCount     = 1;
-	createInfo.subresourceRange.baseArrayLayer = 0;
-	createInfo.subresourceRange.layerCount     = 1;
+    for (i = 0; i < swapchain.imagecount; i++) {
+	ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	ci.image = swapchain.images[i];
+	ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	ci.format = swapchain.imageformat;
+	ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+	ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+	ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+	ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+	ci.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+	ci.subresourceRange.baseMipLevel   = 0;
+	ci.subresourceRange.levelCount     = 1;
+	ci.subresourceRange.baseArrayLayer = 0;
+	ci.subresourceRange.layerCount     = 1;
 
-	assert(vkCreateImageView(getDevice(), &createInfo, NULL,
-		    &swapChainImageViews[i]) == VK_SUCCESS);
+	assert(vkCreateImageView(device, &ci, NULL,
+		    &swapchain.imageviews[i]) == VK_SUCCESS);
     }
 }
 
-void destroyimageviews() {
-    uint32_t swapChainImageNum = getSwapChainImageNum();
+void
+destroyimageviews(void)
+{
+    uint32_t i;
 
-    for (uint32_t i = 0; i < swapChainImageNum; i++) {
-	vkDestroyImageView(getDevice(), swapChainImageViews[i], NULL);
+    for (i = 0; i < swapchain.imagecount; i++) {
+	vkDestroyImageView(device, swapchain.imageviews[i], NULL);
     }
 
-    free(swapChainImageViews);
+    free(swapchain.imageviews);
 }
