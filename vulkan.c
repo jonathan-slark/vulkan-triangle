@@ -89,6 +89,9 @@ static void createswapchain(void);
 static void destroyswapchain(void);
 static void createimageviews(void);
 static void destroyimageviews(void);
+static void creategraphicspipeline(void);
+static unsigned char * createshadercode(const char *filename);
+static void deleteshadercode(unsigned char **code);
 
 /* Variables */
 #ifdef DEBUG
@@ -114,6 +117,8 @@ static VkQueue graphics;
 static VkQueue present;
 static VkSurfaceKHR surface;
 static SwapChain swapchain;
+static const char *vertexshader   = "shaders/vertex.spv";
+static const char *fragmentshader = "shaders/fragment.spv";
 
 /* Function implementations */
 
@@ -256,6 +261,7 @@ vk_initialise(void)
     createlogicaldevice();
     createswapchain();
     createimageviews();
+    creategraphicspipeline();
 }
 
 void
@@ -482,30 +488,30 @@ destroysurface(void)
 }
 
 void
-queryswapchainsupport(VkPhysicalDevice device, VkSurfaceKHR surface)
+queryswapchainsupport(VkPhysicalDevice pd, VkSurfaceKHR surface)
 {
     /* Get basic surface capabilities */
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface,
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd, surface,
 	    &details.capabilities);
 
     /* Get supported surface formats */
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface,
+    vkGetPhysicalDeviceSurfaceFormatsKHR(pd, surface,
 	    &details.formatcount, NULL);
     if (details.formatcount > 0) {
 	details.formats = (VkSurfaceFormatKHR *) malloc(details.formatcount *
 		sizeof(VkSurfaceFormatKHR));
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface,
+	vkGetPhysicalDeviceSurfaceFormatsKHR(pd, surface,
 		&details.formatcount, details.formats);
     }
 
     /* Get supported presentation modes */
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface,
+    vkGetPhysicalDeviceSurfacePresentModesKHR(pd, surface,
 	    &details.presentmodecount, NULL);
     if (details.presentmodecount > 0) {
 	details.presentmodes =
 	    (VkPresentModeKHR *) malloc(details.presentmodecount *
 		    sizeof(VkPresentModeKHR));
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface,
+	vkGetPhysicalDeviceSurfacePresentModesKHR(pd, surface,
 		&details.presentmodecount, details.presentmodes);
     }
 }
@@ -681,4 +687,50 @@ destroyimageviews(void)
     }
 
     free(swapchain.imageviews);
+}
+
+void
+terminate(const char *fmt, const char *s)
+{
+    fprintf(stderr, fmt, s);
+    exit(EXIT_FAILURE);
+}
+
+unsigned char *
+createshadercode(const char *filename)
+{
+    FILE *fp;
+    unsigned char *code;
+    int count;
+
+    if ((fp = fopen(filename, "rb")) == NULL)
+	terminate("Could not open file %s\n", filename);
+
+    if (fseek(fp, 0L, SEEK_END) != 0)
+	terminate("Error on seeking file %s\n", filename);
+    count = ftell(fp);
+    rewind(fp);
+    code = (unsigned char *) malloc(count * sizeof(unsigned char));
+    if (fread(code, sizeof(unsigned char), count, fp) < (size_t) count)
+	terminate("Error reading file %s\n", filename);
+
+    if (fclose(fp) == EOF)
+	terminate("Error on closing file %s\n", filename);
+
+    return code;
+}
+
+void
+deleteshadercode(unsigned char **code)
+{
+    free(*code);
+}
+
+void
+creategraphicspipeline(void) {
+    unsigned char *vertexshadercode, *fragmentshadercode;
+    vertexshadercode = createshadercode(vertexshader);
+    fragmentshadercode = createshadercode(fragmentshader);
+    deleteshadercode(&vertexshadercode);
+    deleteshadercode(&fragmentshadercode);
 }
