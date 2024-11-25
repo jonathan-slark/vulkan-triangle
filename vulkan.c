@@ -1,9 +1,12 @@
 /* Based on:
  * https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/00_Setup/00_Base_code.html
  * Drawing a triangle in Vulkan, rewritten for C99 and Win32.
+ * TODO:
+ * Use terminate() on errors, instead of assert().
  */
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <vulkan/vulkan.h>
@@ -16,9 +19,10 @@
 #include "win32.h"
 
 /* Macros */
-#define LAYERSCOUNT     (sizeof layers     / sizeof layers[0])
-#define EXTSCOUNT       (sizeof exts       / sizeof exts[0])
-#define DEVICEEXTSCOUNT (sizeof deviceexts / sizeof deviceexts[0])
+#define LAYERSCOUNT        (sizeof layers        / sizeof layers[0])
+#define EXTSCOUNT          (sizeof exts          / sizeof exts[0])
+#define DEVICEEXTSCOUNT    (sizeof deviceexts    / sizeof deviceexts[0])
+#define DYNAMICSTATESCOUNT (sizeof dynamicstates / sizeof dynamicstates[0])
 
 /* Types */
 
@@ -70,6 +74,7 @@ static void populatedebugci(VkDebugUtilsMessengerCreateInfoEXT *ci);
 static void createdebugmessenger(void);
 static void destroydebugmessenger(void);
 #endif // DEBUG
+static void terminate(const char *fmt, ...);
 static void createinstance(void);
 static void destroyinstance(void);
 static QueueFamilies findqueuefamilies(VkPhysicalDevice pd);
@@ -90,8 +95,13 @@ static void destroyswapchain(void);
 static void createimageviews(void);
 static void destroyimageviews(void);
 static void creategraphicspipeline(void);
-static unsigned char * createshadercode(const char *filename);
-static void deleteshadercode(unsigned char **code);
+static char *createshadercode(const char *filename, size_t *size);
+static void deleteshadercode(char **code);
+static VkShaderModule createshadermodule(char *code, size_t size);
+static void createrenderpass(void);
+static void destroyrenderpass(void);
+static void creategraphicspipeline(void);
+static void destroygraphicspipeline(void);
 
 /* Variables */
 #ifdef DEBUG
@@ -119,6 +129,10 @@ static VkSurfaceKHR surface;
 static SwapChain swapchain;
 static const char *vertexshader   = "shaders/vertex.spv";
 static const char *fragmentshader = "shaders/fragment.spv";
+static const char *readonlybinary = "rb";
+static VkPipelineLayout pipelinelayout;
+static VkRenderPass renderpass;
+static VkPipeline graphicspipeline;
 
 /* Function implementations */
 
@@ -187,11 +201,10 @@ CreateDebugUtilsMessengerEXT(
     PFN_vkCreateDebugUtilsMessengerEXT func =
 	(PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance,
 		"vkCreateDebugUtilsMessengerEXT");
-    if (func == NULL) {
+    if (func == NULL)
         return VK_ERROR_EXTENSION_NOT_PRESENT;
-    } else {
+    else
         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    }
 }
 
 VkResult
@@ -247,6 +260,18 @@ destroydebugmessenger(void)
 #endif // DEBUG
 
 void
+terminate(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+
+    exit(EXIT_FAILURE);
+}
+
+void
 vk_initialise(void)
 {
 #ifdef DEBUG
@@ -261,12 +286,15 @@ vk_initialise(void)
     createlogicaldevice();
     createswapchain();
     createimageviews();
+    createrenderpass();
     creategraphicspipeline();
 }
 
 void
 vk_terminate(void)
 {
+    destroygraphicspipeline();
+    destroyrenderpass();
     destroyimageviews();
     destroyswapchain();
     destroylogicaldevice();
@@ -414,12 +442,11 @@ pickphysicaldevice(void)
     vkEnumeratePhysicalDevices(instance, &pdcount, pds);
 
     /* Select the first suitable device */
-    for (i = 0; i < pdcount; i++) {
+    for (i = 0; i < pdcount; i++)
 	if (isdevicesuitable(pds[i])) {
 	    physicaldevice = pds[i];
 	    break;
 	}
-    }
 
     free(pds);
     assert(physicaldevice != VK_NULL_HANDLE);
@@ -528,13 +555,11 @@ chooseswapspaceformat(void)
 {
     uint32_t i;
 
-    for (i = 0; i < details.formatcount; i++) {
+    for (i = 0; i < details.formatcount; i++)
 	if (details.formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
 		details.formats[i].colorSpace ==
-		VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+		VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
 	    return details.formats[i];
-	}
-    }
 
     return details.formats[0];
 }
@@ -544,11 +569,9 @@ chooseswappresentmode(void)
 {
     uint32_t i;
 
-    for (i = 0; i < details.presentmodecount; i++) {
-        if (details.presentmodes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
-            return details.presentmodes[i];
-        }
-    }
+    for (i = 0; i < details.presentmodecount; i++)
+	if (details.presentmodes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+	    return details.presentmodes[i];
 
     return VK_PRESENT_MODE_FIFO_KHR;
 }
@@ -569,16 +592,14 @@ chooseswapextent(void)
 	extent.width = rcClient.right;
 	extent.height = rcClient.bottom;
 
-	if (extent.width < minwidth) {
+	if (extent.width < minwidth)
 	    extent.width = minwidth;
-	} else if (extent.width > maxwidth) {
+	else if (extent.width > maxwidth)
 	    extent.width = maxwidth;
-	}
-	if (extent.height < minheight) {
+	if (extent.height < minheight)
 	    extent.height = minheight;
-	} else if (extent.height > maxheight) {
+	else if (extent.height > maxheight)
 	    extent.height = maxheight;
-	}
 
 	return extent;
     } else {
@@ -598,9 +619,8 @@ createswapchain(void)
     const QueueFamilies qf = findqueuefamilies(physicaldevice);
     const uint32_t qfi[] = { qf.graphics, qf.present };
 
-    if (maximagecount > 0 && imagecount > maximagecount) {
+    if (maximagecount > 0 && imagecount > maximagecount)
 	imagecount = maximagecount;
-    }
 
     ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     ci.surface = surface;
@@ -682,36 +702,27 @@ destroyimageviews(void)
 {
     uint32_t i;
 
-    for (i = 0; i < swapchain.imagecount; i++) {
+    for (i = 0; i < swapchain.imagecount; i++)
 	vkDestroyImageView(device, swapchain.imageviews[i], NULL);
-    }
 
     free(swapchain.imageviews);
 }
 
-void
-terminate(const char *fmt, const char *s)
-{
-    fprintf(stderr, fmt, s);
-    exit(EXIT_FAILURE);
-}
-
-unsigned char *
-createshadercode(const char *filename)
+char *
+createshadercode(const char *filename, size_t *size)
 {
     FILE *fp;
-    unsigned char *code;
-    int count;
+    char *code;
 
-    if ((fp = fopen(filename, "rb")) == NULL)
+    if ((fp = fopen(filename, readonlybinary)) == NULL)
 	terminate("Could not open file %s\n", filename);
 
     if (fseek(fp, 0L, SEEK_END) != 0)
 	terminate("Error on seeking file %s\n", filename);
-    count = ftell(fp);
+    *size = ftell(fp);
     rewind(fp);
-    code = (unsigned char *) malloc(count * sizeof(unsigned char));
-    if (fread(code, sizeof(unsigned char), count, fp) < (size_t) count)
+    code = (char *) malloc(*size * sizeof(char));
+    if (fread(code, sizeof(char), *size, fp) < *size)
 	terminate("Error reading file %s\n", filename);
 
     if (fclose(fp) == EOF)
@@ -721,16 +732,187 @@ createshadercode(const char *filename)
 }
 
 void
-deleteshadercode(unsigned char **code)
+deleteshadercode(char **code)
 {
     free(*code);
 }
 
+VkShaderModule
+createshadermodule(char *code, size_t size)
+{
+    VkShaderModuleCreateInfo ci = { 0 };
+    VkShaderModule sm;
+
+    ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    ci.codeSize = size;
+    ci.pCode = (const uint32_t *) code;
+
+    if (vkCreateShaderModule(device, &ci, NULL, &sm) != VK_SUCCESS)
+	terminate("Failed to create shader module");
+
+    return sm;
+}
+
 void
-creategraphicspipeline(void) {
-    unsigned char *vertexshadercode, *fragmentshadercode;
-    vertexshadercode = createshadercode(vertexshader);
-    fragmentshadercode = createshadercode(fragmentshader);
-    deleteshadercode(&vertexshadercode);
-    deleteshadercode(&fragmentshadercode);
+createrenderpass(void)
+{
+    VkAttachmentDescription colorattachment = { 0 };
+    VkAttachmentReference colorattachmentref = { 0 };
+    VkSubpassDescription subpass = { 0 };
+    VkRenderPassCreateInfo renderpassinfo = { 0 };
+
+    colorattachment.format = swapchain.imageformat;
+    colorattachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorattachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorattachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorattachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorattachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorattachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorattachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    colorattachmentref.attachment = 0;
+    colorattachmentref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorattachmentref;
+
+    renderpassinfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderpassinfo.attachmentCount = 1;
+    renderpassinfo.pAttachments = &colorattachment;
+    renderpassinfo.subpassCount = 1;
+    renderpassinfo.pSubpasses = &subpass;
+
+    if (vkCreateRenderPass(device, &renderpassinfo, NULL, &renderpass) != VK_SUCCESS)
+	terminate("Failed to create render pass");
+}
+
+void
+destroyrenderpass(void)
+{
+    vkDestroyRenderPass(device, renderpass, NULL);
+}
+
+void
+creategraphicspipeline(void)
+{
+    char *vertexcode, *fragmentcode;
+    size_t vertexcodesize, fragmentcodesize;
+    VkShaderModule vertexsm, fragmentsm;
+    VkPipelineShaderStageCreateInfo vertexpssci = { 0 }, fragmentpssci = { 0 };
+    VkPipelineShaderStageCreateInfo shaderstagesci[2];
+    VkDynamicState dynamicstates[] = {
+	VK_DYNAMIC_STATE_VIEWPORT,
+	VK_DYNAMIC_STATE_SCISSOR
+    };
+    VkPipelineDynamicStateCreateInfo pdsci = { 0 };
+    VkPipelineVertexInputStateCreateInfo pvisci = { 0 };
+    VkPipelineInputAssemblyStateCreateInfo piasci = { 0 };
+    VkPipelineViewportStateCreateInfo pvsci = { 0 };
+    VkPipelineRasterizationStateCreateInfo prsci = { 0 };
+    VkPipelineMultisampleStateCreateInfo pmsci = { 0 };
+    VkPipelineColorBlendAttachmentState pcbas = { 0 };
+    VkPipelineColorBlendStateCreateInfo pcbsci = { 0 };
+    VkPipelineLayoutCreateInfo plci = { 0 };
+    VkGraphicsPipelineCreateInfo gpci = { 0 };
+
+    vertexcode   = createshadercode(vertexshader,   &vertexcodesize);
+    fragmentcode = createshadercode(fragmentshader, &fragmentcodesize);
+    vertexsm     = createshadermodule(vertexcode,   vertexcodesize);
+    fragmentsm   = createshadermodule(fragmentcode, fragmentcodesize);
+
+    vertexpssci.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertexpssci.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertexpssci.module = vertexsm;
+    vertexpssci.pName = "main";
+
+    fragmentpssci.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragmentpssci.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragmentpssci.module = fragmentsm;
+    fragmentpssci.pName = "main";
+
+    shaderstagesci[0] = vertexpssci;
+    shaderstagesci[1] = fragmentpssci;
+
+    pvisci.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    pvisci.vertexBindingDescriptionCount = 0;
+    pvisci.vertexAttributeDescriptionCount = 0;
+
+    piasci.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    piasci.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    piasci.primitiveRestartEnable = VK_FALSE;
+
+    pvsci.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    pvsci.viewportCount = 1;
+    pvsci.scissorCount = 1;
+
+    prsci.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    prsci.depthClampEnable = VK_FALSE;
+    prsci.rasterizerDiscardEnable = VK_FALSE;
+    prsci.polygonMode = VK_POLYGON_MODE_FILL;
+    prsci.lineWidth = 1.0f;
+    prsci.cullMode = VK_CULL_MODE_BACK_BIT;
+    prsci.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    prsci.depthBiasEnable = VK_FALSE;
+
+    pmsci.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    pmsci.sampleShadingEnable = VK_FALSE;
+    pmsci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    pcbas.colorWriteMask =
+	VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+	VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    pcbas.blendEnable = VK_FALSE;
+
+    pcbsci.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    pcbsci.logicOpEnable = VK_FALSE;
+    pcbsci.logicOp = VK_LOGIC_OP_COPY;
+    pcbsci.attachmentCount = 1;
+    pcbsci.pAttachments = &pcbas;
+    pcbsci.blendConstants[0] = 0.0f;
+    pcbsci.blendConstants[1] = 0.0f;
+    pcbsci.blendConstants[2] = 0.0f;
+    pcbsci.blendConstants[3] = 0.0f;
+
+    pdsci.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    pdsci.dynamicStateCount = DYNAMICSTATESCOUNT;
+    pdsci.pDynamicStates = dynamicstates;
+
+    plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    plci.setLayoutCount = 0;
+    plci.pushConstantRangeCount = 0;
+
+    if (vkCreatePipelineLayout(device, &plci, NULL, &pipelinelayout) != VK_SUCCESS)
+	terminate("Failed to create pipeline layout");
+
+    gpci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    gpci.stageCount = 2;
+    gpci.pStages = shaderstagesci;
+    gpci.pVertexInputState = &pvisci;
+    gpci.pInputAssemblyState = &piasci;
+    gpci.pViewportState = &pvsci;
+    gpci.pRasterizationState = &prsci;
+    gpci.pMultisampleState = &pmsci;
+    gpci.pColorBlendState = &pcbsci;
+    gpci.pDynamicState = &pdsci;
+    gpci.layout = pipelinelayout;
+    gpci.renderPass = renderpass;
+    gpci.subpass = 0;
+    gpci.basePipelineHandle = VK_NULL_HANDLE;
+
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &gpci, NULL,
+		&graphicspipeline) != VK_SUCCESS)
+	terminate("Failed to create graphics pipeline");
+
+    vkDestroyShaderModule(device, vertexsm,   NULL);
+    vkDestroyShaderModule(device, fragmentsm, NULL);
+    deleteshadercode(&vertexcode);
+    deleteshadercode(&fragmentcode);
+}
+
+void
+destroygraphicspipeline(void)
+{
+    vkDestroyPipeline(device, graphicspipeline, NULL);
+    vkDestroyPipelineLayout(device, pipelinelayout, NULL);
 }
