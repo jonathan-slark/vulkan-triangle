@@ -8,7 +8,6 @@
  */
 
 #include <assert.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <vulkan/vulkan.h>
@@ -77,7 +76,6 @@ static void populatedebugci(VkDebugUtilsMessengerCreateInfoEXT *ci);
 static void createdebugmessenger(void);
 static void destroydebugmessenger(void);
 #endif // DEBUG
-static void terminate(const char *fmt, ...);
 static void createinstance(void);
 static void destroyinstance(void);
 static QueueFamilies findqueuefamilies(VkPhysicalDevice pd);
@@ -277,18 +275,6 @@ destroydebugmessenger(void)
 }
 
 #endif // DEBUG
-
-void
-terminate(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-
-    exit(EXIT_FAILURE);
-}
 
 void
 vk_initialise(void)

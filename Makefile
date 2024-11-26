@@ -8,7 +8,7 @@ LDFLAGS  = -L/mingw64/lib -municode -mwindows -lvulkan-1
 GLSLC    = glslc
 
 BIN = triangle.exe
-SRC = vulkan.c win32.c
+SRC = util.c vulkan.c win32.c
 OBJ = $(SRC:.c=.o)
 
 GLSL = shaders/vertex.glsl shaders/fragment.glsl

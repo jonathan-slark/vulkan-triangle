@@ -1,11 +1,7 @@
 /* Based on:
  * https://learn.microsoft.com/en-us/windows/win32/learnwin32/your-first-windows-program
- * TODO:
- * Check message loop, it blocks until a message is sent. Currently using WM_PAINT.
  */
 
-#include <assert.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
@@ -18,7 +14,7 @@
 static const wchar_t classname[] = L"Main Window";
 
 HWND hwnd;
-int frame = 0;
+int quitting = 0;
 
 static LRESULT CALLBACK
 WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -26,11 +22,9 @@ WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     switch (uMsg) {
     case WM_DESTROY:
 	/*  Request to quit */
+	quitting = 1;
 	PostQuitMessage(0);
 	return 0;
-    case WM_PAINT:
-	fprintf(stderr, "Frame #%i\n", frame++);
-	vk_drawframe();
     }
 
     /*  If we don't handle the message, use the default handler */
@@ -76,7 +70,8 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdS
 	    NULL        /*  Additional application data  */
 	    );
     free(title);
-    assert(hwnd != NULL);
+    if (hwnd == NULL)
+	terminate("Failed to create window");
 
     /*  Initialise Vulkan */
     vk_initialise();
@@ -84,10 +79,24 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdS
     /*  Show the window */
     ShowWindow(hwnd, nCmdShow);
 
-    /*  Run the message loop  */
-    while (GetMessage(&msg, NULL, 0, 0) > 0) {
-	TranslateMessage(&msg);
-	DispatchMessage(&msg);
+    /*  Main loop */
+    while (1) {
+	/* Once we've requested to quit, stop rendering and wait for WM_QUIT */
+	if (quitting) {
+	    while (GetMessage(&msg, NULL, 0, 0)) {
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	    }
+
+	    break;
+	} else {
+	    vk_drawframe();
+
+	    if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	    }
+	}
     }
 
     /*  Terminate Vulkan, once the logical device is finished */
