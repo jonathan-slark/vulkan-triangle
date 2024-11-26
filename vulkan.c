@@ -3,6 +3,8 @@
  * Drawing a triangle in Vulkan, rewritten for C99 and Win32.
  * TODO:
  * Use terminate() on errors, instead of assert().
+ * Change struct inilialisation method.
+ * More comments?
  */
 
 #include <assert.h>
@@ -105,6 +107,14 @@ static void creategraphicspipeline(void);
 static void destroygraphicspipeline(void);
 static void createframebuffers(void);
 static void destroyframebuffers(void);
+static void createcommandpool(void);
+static void destroycommandpool(void);
+static void createcommandpool(void);
+static void createcommandbuffer(void);
+static void recordcommandbuffer(VkCommandBuffer commandbuffer,
+	uint32_t imageindex);
+static void createsyncobjects(void);
+static void destroysyncobjects(void);
 
 /* Variables */
 #ifdef DEBUG
@@ -136,6 +146,12 @@ static const char *readonlybinary = "rb";
 static VkPipelineLayout pipelinelayout;
 static VkRenderPass renderpass;
 static VkPipeline graphicspipeline;
+static VkCommandPool commandpool;
+static VkCommandBuffer commandbuffer;
+static const uint32_t vertexcount = 3;
+static VkSemaphore imageavailable;
+static VkSemaphore renderfinished;
+static VkFence inflight;
 
 /* Function implementations */
 
@@ -292,11 +308,16 @@ vk_initialise(void)
     createrenderpass();
     creategraphicspipeline();
     createframebuffers();
+    createcommandpool();
+    createcommandbuffer();
+    createsyncobjects();
 }
 
 void
 vk_terminate(void)
 {
+    destroysyncobjects();
+    destroycommandpool();
     destroyframebuffers();
     destroygraphicspipeline();
     destroyrenderpass();
@@ -765,6 +786,15 @@ createrenderpass(void)
     VkAttachmentReference colorattachmentref = { 0 };
     VkSubpassDescription subpass = { 0 };
     VkRenderPassCreateInfo renderpassinfo = { 0 };
+    VkSubpassDependency dependency = {
+	.srcSubpass = VK_SUBPASS_EXTERNAL,
+	.dstSubpass = 0,
+	.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+	.srcAccessMask = 0,
+	.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+	.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+	.dependencyFlags = 0
+    };
 
     colorattachment.format = swapchain.imageformat;
     colorattachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -787,6 +817,8 @@ createrenderpass(void)
     renderpassinfo.pAttachments = &colorattachment;
     renderpassinfo.subpassCount = 1;
     renderpassinfo.pSubpasses = &subpass;
+    renderpassinfo.dependencyCount = 1;
+    renderpassinfo.pDependencies = &dependency;
 
     if (vkCreateRenderPass(device, &renderpassinfo, NULL, &renderpass) != VK_SUCCESS)
 	terminate("Failed to create render pass");
@@ -954,4 +986,169 @@ destroyframebuffers(void)
 	vkDestroyFramebuffer(device, swapchain.framebuffers[i], NULL);
 
     free(swapchain.framebuffers);
+}
+
+void
+createcommandpool(void)
+{
+    QueueFamilies qf = findqueuefamilies(physicaldevice);
+    VkCommandPoolCreateInfo cpci = {
+	.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+	.pNext = NULL,
+	.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+	.queueFamilyIndex = qf.graphics
+    };
+
+    if (vkCreateCommandPool(device, &cpci, NULL, &commandpool) != VK_SUCCESS)
+	terminate("Failed to create command pool");
+}
+
+void
+destroycommandpool(void)
+{
+    vkDestroyCommandPool(device, commandpool, NULL);
+}
+
+void
+createcommandbuffer(void)
+{
+    VkCommandBufferAllocateInfo cbai = {
+	.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+	.pNext = NULL,
+	.commandPool = commandpool,
+	.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+	.commandBufferCount = 1
+    };
+
+    if (vkAllocateCommandBuffers(device, &cbai, &commandbuffer) != VK_SUCCESS)
+	terminate("Failed to allocate command buffers");
+}
+
+void
+recordcommandbuffer(VkCommandBuffer commandbuffer, uint32_t imageindex)
+{
+    VkCommandBufferBeginInfo cbbi = {
+	.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.pInheritanceInfo = NULL
+    };
+    VkClearValue clearcolour = {{{ 0.0f, 0.0f, 0.0f, 1.0f }}};
+    VkRenderPassBeginInfo rpbi = {
+	.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+	.pNext = NULL,
+	.renderPass = renderpass,
+	.framebuffer = swapchain.framebuffers[imageindex],
+	.renderArea.offset = { 0, 0 },
+	.renderArea.extent = swapchain.extent,
+	.clearValueCount = 1,
+	.pClearValues = &clearcolour
+    };
+    VkViewport viewport = {
+	.x = 0.0f,
+	.y = 0.0f,
+	.width = (float) swapchain.extent.width,
+	.height = (float) swapchain.extent.height,
+	.minDepth = 0.0f,
+	.maxDepth = 1.0f
+    };
+    VkRect2D scissor = {
+	.offset = { 0, 0 },
+	.extent = swapchain.extent
+    };
+
+    if (vkBeginCommandBuffer(commandbuffer, &cbbi) != VK_SUCCESS)
+	terminate("Failed to begin recording command buffer");
+
+    vkCmdBeginRenderPass(commandbuffer, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+	    graphicspipeline);
+    vkCmdSetViewport(commandbuffer, 0, 1, &viewport);
+    vkCmdSetScissor(commandbuffer, 0, 1, &scissor);
+    vkCmdDraw(commandbuffer, vertexcount, 1, 0, 0);
+    vkCmdEndRenderPass(commandbuffer);
+
+    if (vkEndCommandBuffer(commandbuffer) != VK_SUCCESS)
+	terminate("Failed to record command buffer");
+}
+
+void
+vk_drawframe(void)
+{
+    uint32_t imageindex;
+    VkSemaphore waitsemaphores[] = { imageavailable };
+    VkPipelineStageFlags waitstages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    VkSemaphore signalsemaphores[] = { renderfinished };
+    VkSubmitInfo submitinfo = {
+	.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+	.pNext = NULL,
+	.waitSemaphoreCount = 1,
+	.pWaitSemaphores = waitsemaphores,
+	.pWaitDstStageMask = waitstages,
+	.commandBufferCount = 1,
+	.pCommandBuffers = &commandbuffer,
+	.signalSemaphoreCount = 1,
+	.pSignalSemaphores = signalsemaphores
+    };
+    VkSwapchainKHR swapchains[] = { swapchain.handle };
+    VkPresentInfoKHR presentinfo = {
+	.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+	.pNext = NULL,
+	.waitSemaphoreCount = 1,
+	.pWaitSemaphores = signalsemaphores,
+	.swapchainCount = 1,
+	.pSwapchains = swapchains,
+	.pImageIndices = &imageindex,
+	.pResults = NULL
+    };
+
+    /* Wait for the previous frame to finish rendering. The fence is created in
+     * the signaled state so the first call won't block. */
+    vkWaitForFences(device, 1, &inflight, VK_TRUE, UINT64_MAX);
+    vkResetFences(device, 1, &inflight);
+
+    vkAcquireNextImageKHR(device, swapchain.handle, UINT64_MAX, imageavailable,
+	    VK_NULL_HANDLE, &imageindex);
+
+    vkResetCommandBuffer(commandbuffer, 0);
+    recordcommandbuffer(commandbuffer, imageindex);
+
+    if (vkQueueSubmit(graphics, 1, &submitinfo, inflight) != VK_SUCCESS)
+	terminate("Failed to submit draw command buffer");
+
+    vkQueuePresentKHR(present, &presentinfo);
+}
+
+void
+createsyncobjects(void)
+{
+    VkSemaphoreCreateInfo sci = {
+	.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0
+    };
+    VkFenceCreateInfo fci = {
+	.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = VK_FENCE_CREATE_SIGNALED_BIT
+    };
+
+    if (vkCreateSemaphore(device, &sci, NULL, &imageavailable) != VK_SUCCESS ||
+	vkCreateSemaphore(device, &sci, NULL, &renderfinished) != VK_SUCCESS ||
+	vkCreateFence(device, &fci, NULL, &inflight) != VK_SUCCESS)
+	terminate("Failed to create semaphores");
+}
+
+void
+destroysyncobjects(void)
+{
+    vkDestroySemaphore(device, imageavailable, NULL);
+    vkDestroySemaphore(device, renderfinished, NULL);
+    vkDestroyFence(device, inflight, NULL);
+}
+
+void
+vk_devicewait(void)
+{
+    vkDeviceWaitIdle(device);
 }

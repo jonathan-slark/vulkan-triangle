@@ -1,8 +1,11 @@
 /* Based on:
  * https://learn.microsoft.com/en-us/windows/win32/learnwin32/your-first-windows-program
+ * TODO:
+ * Check message loop, it blocks until a message is sent. Currently using WM_PAINT.
  */
 
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
@@ -15,6 +18,7 @@
 static const wchar_t classname[] = L"Main Window";
 
 HWND hwnd;
+int frame = 0;
 
 static LRESULT CALLBACK
 WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -24,6 +28,9 @@ WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	/*  Request to quit */
 	PostQuitMessage(0);
 	return 0;
+    case WM_PAINT:
+	fprintf(stderr, "Frame #%i\n", frame++);
+	vk_drawframe();
     }
 
     /*  If we don't handle the message, use the default handler */
@@ -83,7 +90,8 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdS
 	DispatchMessage(&msg);
     }
 
-    /*  Terminate Vulkan */
+    /*  Terminate Vulkan, once the logical device is finished */
+    vk_devicewait();
     vk_terminate();
 
     return 0;
