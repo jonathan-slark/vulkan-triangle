@@ -48,6 +48,7 @@ typedef struct {
     VkFormat imageformat;
     VkExtent2D extent;
     VkImageView *imageviews;
+    VkFramebuffer *framebuffers;
 } SwapChain;
 
 /* Function declarations */
@@ -102,6 +103,8 @@ static void createrenderpass(void);
 static void destroyrenderpass(void);
 static void creategraphicspipeline(void);
 static void destroygraphicspipeline(void);
+static void createframebuffers(void);
+static void destroyframebuffers(void);
 
 /* Variables */
 #ifdef DEBUG
@@ -288,11 +291,13 @@ vk_initialise(void)
     createimageviews();
     createrenderpass();
     creategraphicspipeline();
+    createframebuffers();
 }
 
 void
 vk_terminate(void)
 {
+    destroyframebuffers();
     destroygraphicspipeline();
     destroyrenderpass();
     destroyimageviews();
@@ -915,4 +920,38 @@ destroygraphicspipeline(void)
 {
     vkDestroyPipeline(device, graphicspipeline, NULL);
     vkDestroyPipelineLayout(device, pipelinelayout, NULL);
+}
+
+void
+createframebuffers(void)
+{
+    uint32_t i;
+    VkFramebufferCreateInfo fci = { 0 };
+
+    swapchain.framebuffers = (VkFramebuffer *) malloc(swapchain.imagecount *
+	    sizeof(VkFramebuffer));
+
+    for (i = 0; i < swapchain.imagecount; i++) {
+	fci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	fci.renderPass = renderpass;
+	fci.attachmentCount = 1;
+	fci.pAttachments = &swapchain.imageviews[i];
+	fci.width = swapchain.extent.width;
+	fci.height = swapchain.extent.height;
+	fci.layers = 1;
+
+	if (vkCreateFramebuffer(device, &fci, NULL, &swapchain.framebuffers[i]) != VK_SUCCESS)
+	    terminate("Failed to create framebuffer");
+    }
+}
+
+void
+destroyframebuffers(void)
+{
+    uint32_t i;
+
+    for (i = 0; i < swapchain.imagecount; i++)
+	vkDestroyFramebuffer(device, swapchain.framebuffers[i], NULL);
+
+    free(swapchain.framebuffers);
 }
