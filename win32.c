@@ -2,6 +2,7 @@
  * https://learn.microsoft.com/en-us/windows/win32/learnwin32/your-first-windows-program
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
@@ -15,6 +16,9 @@ static const wchar_t classname[] = L"Main Window";
 
 HWND hwnd;
 int quitting = 0;
+int minimised = 0;
+int running = 1;
+int frame = 0;
 
 static LRESULT CALLBACK
 WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -25,10 +29,27 @@ WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	quitting = 1;
 	PostQuitMessage(0);
 	return 0;
+    case WM_SIZE:
+	switch(wParam) {
+	case SIZE_MINIMIZED:
+	    minimised = 1;
+	    break;
+	case SIZE_RESTORED:
+	    minimised = 0;
+	    break;
+	}
+	return 0;
     }
 
     /*  If we don't handle the message, use the default handler */
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
+void
+onmessage(MSG *msg)
+{
+    TranslateMessage(msg);
+    DispatchMessage(msg);
 }
 
 int WINAPI
@@ -80,24 +101,28 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdS
     ShowWindow(hwnd, nCmdShow);
 
     /*  Main loop */
-    while (1) {
+    do {
 	/* Once we've requested to quit, stop rendering and wait for WM_QUIT */
 	if (quitting) {
-	    while (GetMessage(&msg, NULL, 0, 0)) {
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-	    }
+	    while (GetMessage(&msg, NULL, 0, 0))
+		onmessage(&msg);
 
-	    break;
+	    running = 0;
+	/* If the window has been minimised wait for WM_SIZE or WM_QUIT */
+	} else if (minimised) {
+	    while (minimised && !quitting && GetMessage(&msg, NULL, 0, 0))
+		onmessage(&msg);
+
+	    if (msg.message == WM_QUIT)
+		running = 0;
 	} else {
+	    fprintf(stderr, "Frame #%i\n", frame++);
 	    vk_drawframe();
 
-	    if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-	    }
+	    if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+		onmessage(&msg);
 	}
-    }
+    } while (running);
 
     /*  Terminate Vulkan, once the logical device is finished */
     vk_devicewait();
