@@ -29,7 +29,7 @@ vulkan.c win32.c: config.h util.h vulkan.h win32.h
 clean:
 	@rm -f $(BIN) $(OBJ) $(SPV)
 
-run:	$(BIN)
+run:	all
 	@./$(BIN)
 
 .PHONY:	all clean run

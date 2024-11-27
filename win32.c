@@ -1,6 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <windows.h>
 
 #include "config.h"
@@ -108,6 +105,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShow
 	} else {
 	    vk_drawframe();
 
+	    /* PeekMessage doesn't block */
 	    if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
 		onmessage(&msg);
 	}
