@@ -108,6 +108,7 @@ static void recordcommandbuffer(VkCommandBuffer commandbuffer,
 	uint32_t imageindex);
 static void createsyncobjects(void);
 static void destroysyncobjects(void);
+static void devicewait(void);
 
 /* Variables */
 #ifdef DEBUG
@@ -293,6 +294,7 @@ vk_initialise(void)
 void
 vk_terminate(void)
 {
+    devicewait();
     destroysyncobjects();
     destroycommandpool();
     destroyframebuffers();
@@ -364,32 +366,36 @@ destroyinstance(void)
 QueueFamilies
 findqueuefamilies(VkPhysicalDevice pd)
 {
-    uint32_t count, i;
+    const uint32_t queuecount = 2;
+    uint32_t qfpcount, i;
     QueueFamilies qf = { 0 };
     VkQueueFamilyProperties *qfps;
-    VkBool32 support;
+    VkBool32 present;
 
     /* Get available queue families */
-    vkGetPhysicalDeviceQueueFamilyProperties(pd, &count, NULL);
-    qfps = (VkQueueFamilyProperties *) malloc(count *
+    vkGetPhysicalDeviceQueueFamilyProperties(pd, &qfpcount, NULL);
+    qfps = (VkQueueFamilyProperties *) malloc(qfpcount *
 	    sizeof(VkQueueFamilyProperties));
-    vkGetPhysicalDeviceQueueFamilyProperties(pd, &count, qfps);
+    vkGetPhysicalDeviceQueueFamilyProperties(pd, &qfpcount, qfps);
 
     /* Check for required queue families */
-    for (i = 0; i < count; i++) {
+    for (i = 0; i < qfpcount; i++) {
 	/* Supports graphics commands */
 	if (qfps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
 	    qf.graphics = i;
 	    qf.count++;
+	}
 
-	    /* Supports presenting to the surface */
-	    vkGetPhysicalDeviceSurfaceSupportKHR(pd, i, surface, &support);
-	    if (support) {
-		qf.present = i;
-		qf.count++;
-		qf.isSuitable = 1;
-		break;
-	    }
+	/* Supports presenting to the surface */
+	vkGetPhysicalDeviceSurfaceSupportKHR(pd, i, surface, &present);
+	if (present) {
+	    qf.present = i;
+	    qf.count++;
+	}
+
+	if (qf.count == queuecount) {
+	    qf.isSuitable = 1;
+	    break;
 	}
     }
 
@@ -421,9 +427,7 @@ checkdeviceext(VkPhysicalDevice pd)
 	    }
 	}
 
-	if (found) {
-	    continue;
-	} else {
+	if (!found) {
 	    free(availableexts);
 	    return 0;
 	}
@@ -458,7 +462,8 @@ pickphysicaldevice(void)
 
     /* Get available physical devices */
     vkEnumeratePhysicalDevices(instance, &pdcount, NULL);
-    assert(pdcount > 0);
+    if (pdcount == 0)
+	terminate("Failed to find GPUs with Vulkan support.");
     pds = (VkPhysicalDevice *) malloc(pdcount * sizeof(VkPhysicalDevice));
     vkEnumeratePhysicalDevices(instance, &pdcount, pds);
 
@@ -470,7 +475,8 @@ pickphysicaldevice(void)
 	}
 
     free(pds);
-    assert(physicaldevice != VK_NULL_HANDLE);
+    if (physicaldevice == VK_NULL_HANDLE)
+	terminate("Failed to find a suitable GPU.");
 }
 
 void
@@ -479,35 +485,45 @@ createlogicaldevice(void)
     uint32_t i;
     QueueFamilies qf = findqueuefamilies(physicaldevice);
     const float prio = 1.0f;
-    VkDeviceQueueCreateInfo *cis = (VkDeviceQueueCreateInfo *)
-	calloc(qf.count, sizeof(VkDeviceQueueCreateInfo));
-    VkPhysicalDeviceFeatures df = { 0 };
-    VkDeviceCreateInfo ci = { 0 };
+    VkDeviceQueueCreateInfo *dqcis = (VkDeviceQueueCreateInfo *)
+	malloc(qf.count * sizeof(VkDeviceQueueCreateInfo));
+    VkPhysicalDeviceFeatures pdf = { 0 };
+    VkDeviceCreateInfo dci = {
+	.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.queueCreateInfoCount = qf.count,
+	.pQueueCreateInfos = dqcis,
+	/* Device layers don't exist now but keep code for older versions. */
+#ifdef DEBUG
+	.enabledLayerCount = COUNT(layers),
+	.ppEnabledLayerNames = layers,
+#else
+	.enabledLayerCount = 0,
+	.ppEnabledLayerNames = NULL,
+#endif /* DEBUG */
+	.enabledExtensionCount = COUNT(deviceexts),
+	.ppEnabledExtensionNames = deviceexts,
+	.pEnabledFeatures = &pdf
+    };
 
     /* Create a queue for each queue family */
     for (i = 0; i < qf.count; i++) {
-	cis[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	cis[i].queueFamilyIndex = i;
-	cis[i].queueCount = 1;
-	cis[i].pQueuePriorities = &prio;
+	dqcis[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	dqcis[i].pNext = NULL;
+	dqcis[i].flags = 0;
+	dqcis[i].queueFamilyIndex = i;
+	dqcis[i].queueCount = 1;
+	dqcis[i].pQueuePriorities = &prio;
     }
 
     /* Create the logical device */
-    ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    ci.pQueueCreateInfos = cis;
-    ci.queueCreateInfoCount = qf.count;
-    ci.pEnabledFeatures = &df;
-    ci.enabledExtensionCount = COUNT(deviceexts);
-    ci.ppEnabledExtensionNames = deviceexts;
-#ifdef DEBUG
-    ci.enabledLayerCount = COUNT(layers);
-    ci.ppEnabledLayerNames = layers;
-#endif /* DEBUG */
-    assert(vkCreateDevice(physicaldevice, &ci, NULL, &device) == VK_SUCCESS);
+    if (vkCreateDevice(physicaldevice, &dci, NULL, &device) != VK_SUCCESS)
+	terminate("Failed to create logical device.");
 
-    /* Get the queues */
+    /* Get the queue handles */
     vkGetDeviceQueue(device, qf.graphics, 0, &graphics);
-    vkGetDeviceQueue(device, qf.present, 0, &present);
+    vkGetDeviceQueue(device, qf.present,  0, &present);
 }
 
 void
@@ -519,14 +535,17 @@ destroylogicaldevice(void)
 void
 createsurface(void)
 {
-    VkWin32SurfaceCreateInfoKHR ci = { 0 };
+    VkWin32SurfaceCreateInfoKHR win32sci = {
+	.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+	.pNext = NULL,
+	.flags = 0,
+	.hinstance = GetModuleHandle(NULL),
+	.hwnd = hwnd
+    };
 
-    ci.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-    ci.hwnd = hwnd;
-    ci.hinstance = GetModuleHandle(NULL);
-
-    assert(vkCreateWin32SurfaceKHR(instance, &ci, NULL, &surface) ==
-	    VK_SUCCESS);
+    if (vkCreateWin32SurfaceKHR(instance, &win32sci, NULL, &surface) !=
+	    VK_SUCCESS)
+	terminate("Failed to create window surface.");
 }
 
 void
@@ -576,12 +595,14 @@ chooseswapspaceformat(void)
 {
     uint32_t i;
 
+    /* Select format with correct colour channels and sRGB */
     for (i = 0; i < details.formatcount; i++)
 	if (details.formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
 		details.formats[i].colorSpace ==
 		VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
 	    return details.formats[i];
 
+    /* Settle for first format */
     return details.formats[0];
 }
 
@@ -590,10 +611,12 @@ chooseswappresentmode(void)
 {
     uint32_t i;
 
+    /* Render frames as fast as possible without tearing */
     for (i = 0; i < details.presentmodecount; i++)
 	if (details.presentmodes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
 	    return details.presentmodes[i];
 
+    /* Settle for wait for vertical sync */
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
@@ -610,7 +633,7 @@ chooseswapextent(void)
     /* Check if width and height don't match the resolution */
     if (details.capabilities.currentExtent.width == UINT32_MAX) {
 	GetClientRect(hwnd, &rcClient);
-	extent.width = rcClient.right;
+	extent.width  = rcClient.right;
 	extent.height = rcClient.bottom;
 
 	if (extent.width < minwidth)
@@ -1143,7 +1166,7 @@ destroysyncobjects(void)
 }
 
 void
-vk_devicewait(void)
+devicewait(void)
 {
     vkDeviceWaitIdle(device);
 }

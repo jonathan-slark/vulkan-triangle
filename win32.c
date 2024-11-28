@@ -111,8 +111,6 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShow
 	}
     } while (running);
 
-    /* Terminate Vulkan, once the logical device is finished */
-    vk_devicewait();
     vk_terminate();
 
     /* Return nExitCode value from PostQuitMessage() */
