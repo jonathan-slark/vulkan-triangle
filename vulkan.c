@@ -5,6 +5,7 @@
  * Use terminate() on errors, instead of assert().
  * Change struct inilialisation method.
  * More comments?
+ * Better error checks.
  */
 
 #include <assert.h>
@@ -18,12 +19,6 @@
 #include "util.h"
 #include "vulkan.h"
 #include "win32.h"
-
-/* Macros */
-#define LAYERSCOUNT        (sizeof layers        / sizeof layers[0])
-#define EXTSCOUNT          (sizeof exts          / sizeof exts[0])
-#define DEVICEEXTSCOUNT    (sizeof deviceexts    / sizeof deviceexts[0])
-#define DYNAMICSTATESCOUNT (sizeof dynamicstates / sizeof dynamicstates[0])
 
 /* Types */
 
@@ -67,9 +62,9 @@ static VkResult CreateDebugUtilsMessengerEXT(
 	const VkAllocationCallbacks* pAllocator,
 	VkDebugUtilsMessengerEXT* pDebugMessenger
 	);
-static VkResult DestroyDebugUtilsMessengerEXT(
+static void DestroyDebugUtilsMessengerEXT(
 	VkInstance instance,
-	VkDebugUtilsMessengerEXT debugmessenger,
+	VkDebugUtilsMessengerEXT debugMessenger,
 	const VkAllocationCallbacks* pAllocator
 	);
 static void populatedebugci(VkDebugUtilsMessengerCreateInfoEXT *ci);
@@ -168,7 +163,7 @@ checklayersupport(void)
     vkEnumerateInstanceLayerProperties(&availablecount, availablelayers);
 
     /* Check if layers we need are available */
-    for (i = 0; i < LAYERSCOUNT; i++) {
+    for (i = 0; i < COUNT(layers); i++) {
 	found = 0;
 
 	for (j = 0; j < availablecount; j++) {
@@ -224,27 +219,25 @@ CreateDebugUtilsMessengerEXT(
         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
 }
 
-VkResult
+void
 DestroyDebugUtilsMessengerEXT(
 	VkInstance instance,
-	VkDebugUtilsMessengerEXT debugmessenger,
+	VkDebugUtilsMessengerEXT debugMessenger,
 	const VkAllocationCallbacks* pAllocator
 	)
 {
     PFN_vkDestroyDebugUtilsMessengerEXT func =
 	(PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance,
 		"vkDestroyDebugUtilsMessengerEXT");
-    if (func == NULL) {
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
-    } else {
-        func(instance, debugmessenger, pAllocator);
-	return VK_SUCCESS;
-    }
+    if (func != NULL)
+        func(instance, debugMessenger, pAllocator);
 }
 
 void
 populatedebugci(VkDebugUtilsMessengerCreateInfoEXT *ci) {
     ci->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    ci->pNext = NULL;
+    ci->flags = 0;
     ci->messageSeverity =
 	/*VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
 	VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |*/
@@ -255,23 +248,24 @@ populatedebugci(VkDebugUtilsMessengerCreateInfoEXT *ci) {
         VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
         VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     ci->pfnUserCallback = debugCallback;
+    ci->pUserData = NULL;
 }
 
 void
 createdebugmessenger(void)
 {
-    VkDebugUtilsMessengerCreateInfoEXT ci = { 0 };
+    VkDebugUtilsMessengerCreateInfoEXT ci;
 
     populatedebugci(&ci);
-    assert(CreateDebugUtilsMessengerEXT(instance, &ci, NULL, &debugmessenger)
-	    == VK_SUCCESS);
+    if (CreateDebugUtilsMessengerEXT(instance, &ci, NULL, &debugmessenger) !=
+	    VK_SUCCESS)
+	terminate("Failed to set up debug messenger.");
 }
 
 void
 destroydebugmessenger(void)
 {
-    assert(DestroyDebugUtilsMessengerEXT(instance, debugmessenger, NULL)
-	    == VK_SUCCESS);
+    DestroyDebugUtilsMessengerEXT(instance, debugmessenger, NULL);
 }
 
 #endif // DEBUG
@@ -279,9 +273,6 @@ destroydebugmessenger(void)
 void
 vk_initialise(void)
 {
-#ifdef DEBUG
-    assert(checklayersupport());
-#endif /* DEBUG */
     createinstance();
 #ifdef DEBUG
     createdebugmessenger();
@@ -310,40 +301,58 @@ vk_terminate(void)
     destroyimageviews();
     destroyswapchain();
     destroylogicaldevice();
+    destroysurface();
 #ifdef DEBUG
     destroydebugmessenger();
 #endif /* DEBUG */
-    destroysurface();
     destroyinstance();
 }
 
 void
 createinstance(void)
 {
-    VkApplicationInfo ai                       = { 0 };
-    VkInstanceCreateInfo ci                    = { 0 };
-    VkDebugUtilsMessengerCreateInfoEXT debugci = { 0 };
-
-    ai.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    ai.pApplicationName   = appname;
-    ai.applicationVersion = appver;
-    ai.apiVersion         = VK_API_VERSION_1_0;
-
-    ci.sType            = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    ci.pApplicationInfo = &ai;
+    VkApplicationInfo ai = {
+	.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+	.pNext = NULL,
+	.pApplicationName = appname,
+	.applicationVersion = appver,
+	.pEngineName = NULL,
+	.engineVersion = 0,
+	.apiVersion = VK_API_VERSION_1_0
+    };
 #ifdef DEBUG
-    ci.enabledLayerCount       = LAYERSCOUNT;
-    ci.ppEnabledLayerNames     = layers;
-    ci.enabledExtensionCount   = EXTSCOUNT;
-    ci.ppEnabledExtensionNames = exts;
-
-    /* Main debug messenger doesn't exist in instance creation and
-     * destruction */
-    populatedebugci(&debugci);
-    ci.pNext = (VkDebugUtilsMessengerCreateInfoEXT *) &debugci;
+    VkDebugUtilsMessengerCreateInfoEXT debugci;
 #endif /* DEBUG */
+    VkInstanceCreateInfo ci = {
+	.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+#ifdef DEBUG
+	/* Main debug messenger doesn't exist in instance creation and
+	 * destruction */
+	.pNext = (VkDebugUtilsMessengerCreateInfoEXT *) &debugci,
+#else
+	.pNext = NULL,
+#endif /* DEBUG */
+	.flags = 0,
+	.pApplicationInfo = &ai,
+#ifdef DEBUG
+	.enabledLayerCount = COUNT(layers),
+	.ppEnabledLayerNames = layers,
+#else
+	.enabledLayerCount = 0,
+	.ppEnabledLayerNames = NULL.
+#endif /* DEBUG */
+	.enabledExtensionCount = COUNT(exts),
+	.ppEnabledExtensionNames = exts
+    };
 
-    assert(vkCreateInstance(&ci, NULL, &instance) == VK_SUCCESS);
+#ifdef DEBUG
+    if (!checklayersupport())
+	terminate("Validation layers requested, but not available.");
+
+    populatedebugci(&debugci);
+#endif /* DEBUG */
+    if(vkCreateInstance(&ci, NULL, &instance) != VK_SUCCESS)
+	terminate("Failed to create instance.\n");
 }
 
 void
@@ -402,7 +411,7 @@ checkdeviceext(VkPhysicalDevice pd)
 	    availableexts);
 
     /* Check we have required extensions */
-    for (i = 0; i < DEVICEEXTSCOUNT; i++) {
+    for (i = 0; i < COUNT(deviceexts); i++) {
 	found = 0;
 
 	for (j = 0; j < availablecount; j++) {
@@ -488,10 +497,10 @@ createlogicaldevice(void)
     ci.pQueueCreateInfos = cis;
     ci.queueCreateInfoCount = qf.count;
     ci.pEnabledFeatures = &df;
-    ci.enabledExtensionCount = DEVICEEXTSCOUNT;
+    ci.enabledExtensionCount = COUNT(deviceexts);
     ci.ppEnabledExtensionNames = deviceexts;
 #ifdef DEBUG
-    ci.enabledLayerCount = LAYERSCOUNT;
+    ci.enabledLayerCount = COUNT(layers);
     ci.ppEnabledLayerNames = layers;
 #endif /* DEBUG */
     assert(vkCreateDevice(physicaldevice, &ci, NULL, &device) == VK_SUCCESS);
@@ -898,7 +907,7 @@ creategraphicspipeline(void)
     pcbsci.blendConstants[3] = 0.0f;
 
     pdsci.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    pdsci.dynamicStateCount = DYNAMICSTATESCOUNT;
+    pdsci.dynamicStateCount = COUNT(dynamicstates);
     pdsci.pDynamicStates = dynamicstates;
 
     plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;

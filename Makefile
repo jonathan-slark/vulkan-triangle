@@ -2,7 +2,9 @@
 
 CC       = gcc
 CPPFLAGS = -D_POSIX_C_SOURCE=200809L -DDEBUG -DVK_USE_PLATFORM_WIN32_KHR
+#CPPFLAGS = -D_POSIX_C_SOURCE=200809L -DVK_USE_PLATFORM_WIN32_KHR
 CFLAGS   = -I/mingw64/include -std=c99 -pedantic -Wall -Wextra -g -O0
+#CFLAGS   = -I/mingw64/include -std=c99 -pedantic -Wall -Wextra -O2
 LDFLAGS  = -L/mingw64/lib -mwindows -lvulkan-1
 GLSLC    = glslc
 
