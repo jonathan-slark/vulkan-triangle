@@ -659,42 +659,49 @@ createswapchain(void)
     const VkPresentModeKHR pm = chooseswappresentmode();
     const VkExtent2D extent = chooseswapextent();
     const uint32_t maximagecount = details.capabilities.maxImageCount;
-    VkSwapchainCreateInfoKHR ci = { 0 };
     const QueueFamilies qf = findqueuefamilies(physicaldevice);
     const uint32_t qfi[] = { qf.graphics, qf.present };
+    VkSwapchainCreateInfoKHR ci = {
+	.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+	.pNext = NULL,
+	.surface = surface,
+	.minImageCount = 0,
+	.imageFormat = sf.format,
+	.imageColorSpace = sf.colorSpace,
+	.imageExtent = extent,
+	.imageArrayLayers = 1,
+	/* Render directly */
+	.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+	/* Use exclusive for best perfomance, if queue familes are the same */
+	.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+	.queueFamilyIndexCount = 0,
+	.pQueueFamilyIndices = NULL,
+	.preTransform = details.capabilities.currentTransform,
+	/* Ignore alpha channel */
+	.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+	.presentMode = pm,
+	/* Ignore obscured pixels */
+	.clipped = VK_TRUE,
+	.oldSwapchain = VK_NULL_HANDLE
+    };
 
     if (maximagecount > 0 && imagecount > maximagecount)
 	imagecount = maximagecount;
-
-    ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    ci.surface = surface;
-
-    /* Swap chain images */
     ci.minImageCount = imagecount;
-    ci.imageFormat = sf.format;
-    ci.imageColorSpace = sf.colorSpace;
-    ci.imageExtent = extent;
-    ci.imageArrayLayers = 1;
-    ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    /* Use exclusive if the queue families are the same */
-    if (qf.graphics == qf.present) {
-	ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    } else {
+    /* If queue families differ allow images to be used by different queues */
+    if (qf.graphics != qf.present) {
 	ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 	ci.queueFamilyIndexCount = 2;
 	ci.pQueueFamilyIndices = qfi;
     }
 
-    ci.preTransform = details.capabilities.currentTransform;
-    ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    ci.presentMode = pm;
-    ci.clipped = VK_TRUE;
-    ci.oldSwapchain = VK_NULL_HANDLE;
-
-    assert(vkCreateSwapchainKHR(device, &ci, NULL, &swapchain.handle) == VK_SUCCESS);
+    if (vkCreateSwapchainKHR(device, &ci, NULL, &swapchain.handle) !=
+	    VK_SUCCESS)
+	terminate("Failed to create swap chain.");
     freeswapchaindetails();
 
+    /* Get the swap chain image handles */
     vkGetSwapchainImagesKHR(device, swapchain.handle, &imagecount, NULL);
     swapchain.images = (VkImage *) malloc(imagecount * sizeof(VkImage));
     swapchain.imagecount = imagecount;
@@ -716,28 +723,34 @@ void
 createimageviews(void)
 {
     uint32_t i;
-    VkImageViewCreateInfo ci = { 0 };
+    VkImageViewCreateInfo ci;
 
     swapchain.imageviews = (VkImageView *) malloc(swapchain.imagecount *
 	    sizeof(VkImageView));
 
     for (i = 0; i < swapchain.imagecount; i++) {
 	ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	ci.pNext = NULL;
+	ci.flags = 0;
 	ci.image = swapchain.images[i];
+	/* 2D textures */
 	ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
 	ci.format = swapchain.imageformat;
+	/* Don't swizzle the color channels around */
 	ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
 	ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
 	ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
 	ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+	/* Colour targets with no mimmapping or multiple layers */
 	ci.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
 	ci.subresourceRange.baseMipLevel   = 0;
 	ci.subresourceRange.levelCount     = 1;
 	ci.subresourceRange.baseArrayLayer = 0;
 	ci.subresourceRange.layerCount     = 1;
 
-	assert(vkCreateImageView(device, &ci, NULL,
-		    &swapchain.imageviews[i]) == VK_SUCCESS);
+	if (vkCreateImageView(device, &ci, NULL, &swapchain.imageviews[i]) !=
+		VK_SUCCESS)
+	    terminate("Failed to create image views.");
     }
 }
 
