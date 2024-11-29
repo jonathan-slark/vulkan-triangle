@@ -12,7 +12,10 @@ Why C99?
 --------
 
 I enjoy using a low-level and simple programming language that I can keep in
-my head without too much refering to documentation.
+my head without too much refering to documentation. I've followed the
+[suckless.org coding style](https://suckless.org/coding_style/) as I like the
+coding philosphy of keeping things simple. I decided to use designated
+initializers, from C99, for the structures as they are self-documenting.
 
 
 Why Win32?
@@ -28,7 +31,7 @@ MSYS2
 My development environment is MSYS2. I enjoy using a UNIX style programming
 environment as apposed to a full blown IDE. gcc has better support for plain C
 then MSVC and MSYS2 can produce native windows binaries without extra
-dependancies. There is a POSIX Makefile for compiling the program. Vulkan
+dependancies. There is a POSIX Makefile for building the program. Vulkan
 headers and libraries can be installed on MSYS2. I'm using glslc.exe that is
 included in the Vulkan SDK and can be run from within MSYS2.
 

@@ -469,11 +469,12 @@ pickphysicaldevice(void)
     vkEnumeratePhysicalDevices(instance, &pdcount, pds);
 
     /* Select the first suitable device */
-    for (i = 0; i < pdcount; i++)
+    for (i = 0; i < pdcount; i++) {
 	if (isdevicesuitable(pds[i])) {
 	    physicaldevice = pds[i];
 	    break;
 	}
+    }
 
     free(pds);
     if (physicaldevice == VK_NULL_HANDLE)
@@ -724,30 +725,32 @@ void
 createimageviews(void)
 {
     uint32_t i;
-    VkImageViewCreateInfo ci;
+    VkImageViewCreateInfo ci = {
+	.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.image = VK_NULL_HANDLE,
+	/* 2D textures */
+	.viewType = VK_IMAGE_VIEW_TYPE_2D,
+	.format = swapchain.imageformat,
+	/* Don't swizzle the color channels around */
+	.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+	.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+	.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+	.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+	/* Colour targets with no mimmapping or multiple layers */
+	.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+	.subresourceRange.baseMipLevel   = 0,
+	.subresourceRange.levelCount     = 1,
+	.subresourceRange.baseArrayLayer = 0,
+	.subresourceRange.layerCount     = 1
+    };
 
     swapchain.imageviews = (VkImageView *) malloc(swapchain.imagecount *
 	    sizeof(VkImageView));
 
     for (i = 0; i < swapchain.imagecount; i++) {
-	ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	ci.pNext = NULL;
-	ci.flags = 0;
 	ci.image = swapchain.images[i];
-	/* 2D textures */
-	ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	ci.format = swapchain.imageformat;
-	/* Don't swizzle the color channels around */
-	ci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-	ci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-	ci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-	ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-	/* Colour targets with no mimmapping or multiple layers */
-	ci.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-	ci.subresourceRange.baseMipLevel   = 0;
-	ci.subresourceRange.levelCount     = 1;
-	ci.subresourceRange.baseArrayLayer = 0;
-	ci.subresourceRange.layerCount     = 1;
 
 	if (vkCreateImageView(device, &ci, NULL, &swapchain.imageviews[i]) !=
 		VK_SUCCESS)
@@ -773,18 +776,18 @@ createshadercode(const char *filename, size_t *size)
     char *code;
 
     if ((fp = fopen(filename, readonlybinary)) == NULL)
-	terminate("Could not open file %s\n", filename);
+	terminate("Could not open file %s.\n", filename);
 
     if (fseek(fp, 0L, SEEK_END) != 0)
-	terminate("Error on seeking file %s\n", filename);
+	terminate("Error on seeking file %s.\n", filename);
     *size = ftell(fp);
     rewind(fp);
     code = (char *) malloc(*size * sizeof(char));
     if (fread(code, sizeof(char), *size, fp) < *size)
-	terminate("Error reading file %s\n", filename);
+	terminate("Error reading file %s.\n", filename);
 
     if (fclose(fp) == EOF)
-	terminate("Error on closing file %s\n", filename);
+	terminate("Error on closing file %s.\n", filename);
 
     return code;
 }
@@ -808,7 +811,7 @@ createshadermodule(char *code, size_t size)
     VkShaderModule sm;
 
     if (vkCreateShaderModule(device, &ci, NULL, &sm) != VK_SUCCESS)
-	terminate("Failed to create shader module");
+	terminate("Failed to create shader module.");
 
     return sm;
 }
@@ -816,10 +819,38 @@ createshadermodule(char *code, size_t size)
 void
 createrenderpass(void)
 {
-    VkAttachmentDescription colorattachment = { 0 };
-    VkAttachmentReference colorattachmentref = { 0 };
-    VkSubpassDescription subpass = { 0 };
-    VkRenderPassCreateInfo renderpassinfo = { 0 };
+    VkAttachmentDescription colorattachment = {
+	.flags = 0,
+	.format = swapchain.imageformat,
+	.samples = VK_SAMPLE_COUNT_1_BIT,
+	/* Clear to black before rendering */
+	.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+	.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+	/* Not using the stencile buffer */
+	.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+	.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+	.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+	/* Get image ready for presentation after rendering */
+	.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+    };
+    /* Single subpass as a colour buffer */
+    VkAttachmentReference colorattachmentref = {
+	.attachment = 0,
+	.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+    VkSubpassDescription subpass = {
+	.flags = 0,
+	/* Graphics subpass, not compute */
+	.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+	.inputAttachmentCount = 0,
+	.pInputAttachments = NULL,
+	.colorAttachmentCount = 1,
+	.pColorAttachments = &colorattachmentref,
+	.pResolveAttachments = NULL,
+	.pDepthStencilAttachment = NULL,
+	.preserveAttachmentCount = 0,
+	.pPreserveAttachments = NULL
+    };
     VkSubpassDependency dependency = {
 	.srcSubpass = VK_SUBPASS_EXTERNAL,
 	.dstSubpass = 0,
@@ -829,33 +860,20 @@ createrenderpass(void)
 	.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 	.dependencyFlags = 0
     };
+    VkRenderPassCreateInfo rpci = {
+	.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.attachmentCount = 1,
+	.pAttachments = &colorattachment,
+	.subpassCount = 1,
+	.pSubpasses = &subpass,
+	.dependencyCount = 1,
+	.pDependencies = &dependency
+    };
 
-    colorattachment.format = swapchain.imageformat;
-    colorattachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorattachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorattachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorattachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorattachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorattachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorattachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    colorattachmentref.attachment = 0;
-    colorattachmentref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorattachmentref;
-
-    renderpassinfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderpassinfo.attachmentCount = 1;
-    renderpassinfo.pAttachments = &colorattachment;
-    renderpassinfo.subpassCount = 1;
-    renderpassinfo.pSubpasses = &subpass;
-    renderpassinfo.dependencyCount = 1;
-    renderpassinfo.pDependencies = &dependency;
-
-    if (vkCreateRenderPass(device, &renderpassinfo, NULL, &renderpass) != VK_SUCCESS)
-	terminate("Failed to create render pass");
+    if (vkCreateRenderPass(device, &rpci, NULL, &renderpass) != VK_SUCCESS)
+	terminate("Failed to create render pass.");
 }
 
 void
@@ -963,51 +981,70 @@ creategraphicspipeline(void)
 	.alphaToCoverageEnable = VK_FALSE,
 	.alphaToOneEnable = VK_FALSE
     };
+    /* Disable colour blending */
     VkPipelineColorBlendAttachmentState pcbas = {
 	.blendEnable = VK_FALSE,
+	.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+	.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+	.colorBlendOp = VK_BLEND_OP_ADD,
+	.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+	.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+	.alphaBlendOp = VK_BLEND_OP_ADD,
 	.colorWriteMask =
 	    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
 	    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
     };
-    VkPipelineColorBlendStateCreateInfo pcbsci = { 0 };
-    VkPipelineLayoutCreateInfo plci = { 0 };
-    VkGraphicsPipelineCreateInfo gpci = { 0 };
-
-    pcbsci.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    pcbsci.logicOpEnable = VK_FALSE;
-    pcbsci.logicOp = VK_LOGIC_OP_COPY;
-    pcbsci.attachmentCount = 1;
-    pcbsci.pAttachments = &pcbas;
-    pcbsci.blendConstants[0] = 0.0f;
-    pcbsci.blendConstants[1] = 0.0f;
-    pcbsci.blendConstants[2] = 0.0f;
-    pcbsci.blendConstants[3] = 0.0f;
-
-    plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    plci.setLayoutCount = 0;
-    plci.pushConstantRangeCount = 0;
+    VkPipelineColorBlendStateCreateInfo pcbsci = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.logicOpEnable = VK_FALSE,
+	.logicOp = VK_LOGIC_OP_COPY,
+	.attachmentCount = 1,
+	.pAttachments = &pcbas,
+	.blendConstants[0] = 0.0f,
+	.blendConstants[1] = 0.0f,
+	.blendConstants[2] = 0.0f,
+	.blendConstants[3] = 0.0f
+    };
+    VkPipelineLayoutCreateInfo plci = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.setLayoutCount = 0,
+	.pSetLayouts = NULL,
+	.pushConstantRangeCount = 0,
+	.pPushConstantRanges = NULL
+    };
+    VkGraphicsPipelineCreateInfo gpci = {
+	.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.stageCount = COUNT(psscis),
+	.pStages = psscis,
+	.pVertexInputState = &pvisci,
+	.pInputAssemblyState = &piasci,
+	.pTessellationState = NULL,
+	.pViewportState = &pvsci,
+	.pRasterizationState = &prsci,
+	.pMultisampleState = &pmsci,
+	.pColorBlendState = &pcbsci,
+	.pDynamicState = &pdsci,
+	.layout = VK_NULL_HANDLE,
+	.renderPass = renderpass,
+	.subpass = 0,
+	.basePipelineHandle = VK_NULL_HANDLE,
+	.basePipelineIndex = -1
+    };
 
     if (vkCreatePipelineLayout(device, &plci, NULL, &pipelinelayout) != VK_SUCCESS)
-	terminate("Failed to create pipeline layout");
+	terminate("Failed to create pipeline layout.");
 
-    gpci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    gpci.stageCount = 2;
-    gpci.pStages = psscis;
-    gpci.pVertexInputState = &pvisci;
-    gpci.pInputAssemblyState = &piasci;
-    gpci.pViewportState = &pvsci;
-    gpci.pRasterizationState = &prsci;
-    gpci.pMultisampleState = &pmsci;
-    gpci.pColorBlendState = &pcbsci;
-    gpci.pDynamicState = &pdsci;
     gpci.layout = pipelinelayout;
-    gpci.renderPass = renderpass;
-    gpci.subpass = 0;
-    gpci.basePipelineHandle = VK_NULL_HANDLE;
 
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &gpci, NULL,
 		&graphicspipeline) != VK_SUCCESS)
-	terminate("Failed to create graphics pipeline");
+	terminate("Failed to create graphics pipeline.");
 
     vkDestroyShaderModule(device, vertexsm,   NULL);
     vkDestroyShaderModule(device, fragmentsm, NULL);
@@ -1026,22 +1063,26 @@ void
 createframebuffers(void)
 {
     uint32_t i;
-    VkFramebufferCreateInfo fci = { 0 };
+    VkFramebufferCreateInfo fci = {
+	.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.renderPass = renderpass,
+	.attachmentCount = 1,
+	.pAttachments = NULL,
+	.width = swapchain.extent.width,
+	.height = swapchain.extent.height,
+	.layers = 1
+    };
 
     swapchain.framebuffers = (VkFramebuffer *) malloc(swapchain.imagecount *
 	    sizeof(VkFramebuffer));
 
     for (i = 0; i < swapchain.imagecount; i++) {
-	fci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	fci.renderPass = renderpass;
-	fci.attachmentCount = 1;
 	fci.pAttachments = &swapchain.imageviews[i];
-	fci.width = swapchain.extent.width;
-	fci.height = swapchain.extent.height;
-	fci.layers = 1;
 
 	if (vkCreateFramebuffer(device, &fci, NULL, &swapchain.framebuffers[i]) != VK_SUCCESS)
-	    terminate("Failed to create framebuffer");
+	    terminate("Failed to create framebuffer.");
     }
 }
 
@@ -1063,12 +1104,13 @@ createcommandpool(void)
     VkCommandPoolCreateInfo cpci = {
 	.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 	.pNext = NULL,
+	/* Recording a command buffer every frame */
 	.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 	.queueFamilyIndex = qf.graphics
     };
 
     if (vkCreateCommandPool(device, &cpci, NULL, &commandpool) != VK_SUCCESS)
-	terminate("Failed to create command pool");
+	terminate("Failed to create command pool.");
 }
 
 void
@@ -1084,12 +1126,13 @@ createcommandbuffer(void)
 	.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 	.pNext = NULL,
 	.commandPool = commandpool,
+	/* Not using secondary command buffers */
 	.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 	.commandBufferCount = 1
     };
 
     if (vkAllocateCommandBuffers(device, &cbai, &commandbuffer) != VK_SUCCESS)
-	terminate("Failed to allocate command buffers");
+	terminate("Failed to allocate command buffers.");
 }
 
 void
@@ -1101,6 +1144,7 @@ recordcommandbuffer(VkCommandBuffer commandbuffer, uint32_t imageindex)
 	.flags = 0,
 	.pInheritanceInfo = NULL
     };
+    /* Three levels of braces: clearcolour.color.float32 */
     VkClearValue clearcolour = {{{ 0.0f, 0.0f, 0.0f, 1.0f }}};
     VkRenderPassBeginInfo rpbi = {
 	.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -1126,9 +1170,11 @@ recordcommandbuffer(VkCommandBuffer commandbuffer, uint32_t imageindex)
     };
 
     if (vkBeginCommandBuffer(commandbuffer, &cbbi) != VK_SUCCESS)
-	terminate("Failed to begin recording command buffer");
+	terminate("Failed to begin recording command buffer.");
 
+    /* Not using secondary command buffers */
     vkCmdBeginRenderPass(commandbuffer, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+    /* This is for graphics and not compute */
     vkCmdBindPipeline(commandbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 	    graphicspipeline);
     vkCmdSetViewport(commandbuffer, 0, 1, &viewport);
@@ -1137,15 +1183,17 @@ recordcommandbuffer(VkCommandBuffer commandbuffer, uint32_t imageindex)
     vkCmdEndRenderPass(commandbuffer);
 
     if (vkEndCommandBuffer(commandbuffer) != VK_SUCCESS)
-	terminate("Failed to record command buffer");
+	terminate("Failed to record command buffer.");
 }
 
 void
 vk_drawframe(void)
 {
     uint32_t imageindex;
+    /* Don't write colours till image is available */
     VkSemaphore waitsemaphores[] = { imageavailable };
-    VkPipelineStageFlags waitstages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    VkPipelineStageFlags waitstages[] = {
+	VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
     VkSemaphore signalsemaphores[] = { renderfinished };
     VkSubmitInfo submitinfo = {
 	.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -1182,7 +1230,7 @@ vk_drawframe(void)
     recordcommandbuffer(commandbuffer, imageindex);
 
     if (vkQueueSubmit(graphics, 1, &submitinfo, inflight) != VK_SUCCESS)
-	terminate("Failed to submit draw command buffer");
+	terminate("Failed to submit draw command buffer.");
 
     vkQueuePresentKHR(present, &presentinfo);
 }
@@ -1204,7 +1252,7 @@ createsyncobjects(void)
     if (vkCreateSemaphore(device, &sci, NULL, &imageavailable) != VK_SUCCESS ||
 	vkCreateSemaphore(device, &sci, NULL, &renderfinished) != VK_SUCCESS ||
 	vkCreateFence(device, &fci, NULL, &inflight) != VK_SUCCESS)
-	terminate("Failed to create semaphores");
+	terminate("Failed to create semaphores.");
 }
 
 void
