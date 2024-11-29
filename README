@@ -1,0 +1,40 @@
+Vulkan Triangle in C99 and Win32
+================================
+
+This project is an implementation of the [Vulkan Triangle official guide]
+(https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/00_Setup/00_Base_code.html)
+using C99 instead of C++ and Win32 instead of glfw. I hope to use this as the
+basis for a framework for games I will make in the future. It is a complete
+and commented example.
+
+
+Why C99?
+--------
+
+I enjoy using a low-level and simple programming language that I can keep in
+my head without too much refering to documentation.
+
+
+Why Win32?
+----------
+
+I want to keep library depenancies to a minimum and have control over the
+working details of the operating system.
+
+
+MSYS2
+-----
+
+My development environment is MSYS2. I enjoy using a UNIX style programming
+environment as apposed to a full blown IDE. gcc has better support for plain C
+then MSVC and MSYS2 can produce native windows binaries without extra
+dependancies. There is a POSIX Makefile for compiling the program. Vulkan
+headers and libraries can be installed on MSYS2. I'm using glslc.exe that is
+included in the Vulkan SDK and can be run from within MSYS2.
+
+Required MSYS2 packages:
+make
+mingw-w64-ucrt-x86_64-gcc
+mingw-w64-x86_64-vulkan-headers
+mingw-w64-x86_64-vulkan-loader
+mingw-w64-x86_64-vulkan-validation-layers

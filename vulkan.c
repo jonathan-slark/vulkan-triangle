@@ -137,6 +137,7 @@ static SwapChain swapchain;
 static const char *vertexshader   = "shaders/vertex.spv";
 static const char *fragmentshader = "shaders/fragment.spv";
 static const char *readonlybinary = "rb";
+static const char *shaderentry    = "main";
 static VkPipelineLayout pipelinelayout;
 static VkRenderPass renderpass;
 static VkPipeline graphicspipeline;
@@ -797,12 +798,14 @@ deleteshadercode(char **code)
 VkShaderModule
 createshadermodule(char *code, size_t size)
 {
-    VkShaderModuleCreateInfo ci = { 0 };
+    VkShaderModuleCreateInfo ci = {
+	.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.codeSize = size,
+	.pCode = (const uint32_t *) code
+    };
     VkShaderModule sm;
-
-    ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    ci.codeSize = size;
-    ci.pCode = (const uint32_t *) code;
 
     if (vkCreateShaderModule(device, &ci, NULL, &sm) != VK_SUCCESS)
 	terminate("Failed to create shader module");
@@ -864,73 +867,111 @@ destroyrenderpass(void)
 void
 creategraphicspipeline(void)
 {
-    char *vertexcode, *fragmentcode;
     size_t vertexcodesize, fragmentcodesize;
-    VkShaderModule vertexsm, fragmentsm;
-    VkPipelineShaderStageCreateInfo vertexpssci = { 0 }, fragmentpssci = { 0 };
-    VkPipelineShaderStageCreateInfo shaderstagesci[2];
+    char *vertexcode = createshadercode(vertexshader, &vertexcodesize);
+    char *fragmentcode = createshadercode(fragmentshader, &fragmentcodesize);
+    VkShaderModule vertexsm = createshadermodule(vertexcode, vertexcodesize);
+    VkShaderModule fragmentsm = createshadermodule(fragmentcode,
+	    fragmentcodesize);
+    VkPipelineShaderStageCreateInfo vertexpssci = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.stage = VK_SHADER_STAGE_VERTEX_BIT,
+	.module = vertexsm,
+	.pName = shaderentry,
+	.pSpecializationInfo = NULL
+    };
+    VkPipelineShaderStageCreateInfo fragmentpssci = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+	.module = fragmentsm,
+	.pName = shaderentry,
+	.pSpecializationInfo = NULL
+    };
+    VkPipelineShaderStageCreateInfo psscis[] = {
+	vertexpssci,
+	fragmentpssci
+    };
+    /* No vertex data to load */
+    VkPipelineVertexInputStateCreateInfo pvisci = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.vertexBindingDescriptionCount = 0,
+	.pVertexBindingDescriptions = NULL,
+	.vertexAttributeDescriptionCount = 0,
+	.pVertexAttributeDescriptions = NULL
+    };
+    VkPipelineInputAssemblyStateCreateInfo piasci = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+	.primitiveRestartEnable = VK_FALSE
+    };
+    /* Viewport and scissor state will be specified at drawing time */
     VkDynamicState dynamicstates[] = {
 	VK_DYNAMIC_STATE_VIEWPORT,
 	VK_DYNAMIC_STATE_SCISSOR
     };
-    VkPipelineDynamicStateCreateInfo pdsci = { 0 };
-    VkPipelineVertexInputStateCreateInfo pvisci = { 0 };
-    VkPipelineInputAssemblyStateCreateInfo piasci = { 0 };
-    VkPipelineViewportStateCreateInfo pvsci = { 0 };
-    VkPipelineRasterizationStateCreateInfo prsci = { 0 };
-    VkPipelineMultisampleStateCreateInfo pmsci = { 0 };
-    VkPipelineColorBlendAttachmentState pcbas = { 0 };
+    VkPipelineDynamicStateCreateInfo pdsci = { 
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.dynamicStateCount = COUNT(dynamicstates),
+	.pDynamicStates = dynamicstates
+    };
+    VkPipelineViewportStateCreateInfo pvsci = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.viewportCount = 1,
+	.pViewports = NULL,
+	.scissorCount = 1,
+	.pScissors = NULL
+    };
+    VkPipelineRasterizationStateCreateInfo prsci = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	/* Discard fragments that are not visibile */
+	.depthClampEnable = VK_FALSE,
+	/* Don't disable rastersizer */
+	.rasterizerDiscardEnable = VK_FALSE,
+	.polygonMode = VK_POLYGON_MODE_FILL,
+	.cullMode = VK_CULL_MODE_BACK_BIT,
+	/* Clockwise vertex order for faces to be considered front-facing */
+	.frontFace = VK_FRONT_FACE_CLOCKWISE,
+	.depthBiasEnable = VK_FALSE,
+	.depthBiasConstantFactor = 0.0f,
+	.depthBiasClamp = 0.0f,
+	.depthBiasSlopeFactor = 0.0f,
+	.lineWidth = 1.0f
+    };
+    /* Disable multisampling */
+    VkPipelineMultisampleStateCreateInfo pmsci = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+	.pNext = NULL,
+	.flags = 0,
+	.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+	.sampleShadingEnable = VK_FALSE,
+	.minSampleShading = 0.0f,
+	.pSampleMask = NULL,
+	.alphaToCoverageEnable = VK_FALSE,
+	.alphaToOneEnable = VK_FALSE
+    };
+    VkPipelineColorBlendAttachmentState pcbas = {
+	.blendEnable = VK_FALSE,
+	.colorWriteMask =
+	    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+	    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+    };
     VkPipelineColorBlendStateCreateInfo pcbsci = { 0 };
     VkPipelineLayoutCreateInfo plci = { 0 };
     VkGraphicsPipelineCreateInfo gpci = { 0 };
-
-    vertexcode   = createshadercode(vertexshader,   &vertexcodesize);
-    fragmentcode = createshadercode(fragmentshader, &fragmentcodesize);
-    vertexsm     = createshadermodule(vertexcode,   vertexcodesize);
-    fragmentsm   = createshadermodule(fragmentcode, fragmentcodesize);
-
-    vertexpssci.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertexpssci.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertexpssci.module = vertexsm;
-    vertexpssci.pName = "main";
-
-    fragmentpssci.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragmentpssci.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragmentpssci.module = fragmentsm;
-    fragmentpssci.pName = "main";
-
-    shaderstagesci[0] = vertexpssci;
-    shaderstagesci[1] = fragmentpssci;
-
-    pvisci.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    pvisci.vertexBindingDescriptionCount = 0;
-    pvisci.vertexAttributeDescriptionCount = 0;
-
-    piasci.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    piasci.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    piasci.primitiveRestartEnable = VK_FALSE;
-
-    pvsci.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    pvsci.viewportCount = 1;
-    pvsci.scissorCount = 1;
-
-    prsci.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    prsci.depthClampEnable = VK_FALSE;
-    prsci.rasterizerDiscardEnable = VK_FALSE;
-    prsci.polygonMode = VK_POLYGON_MODE_FILL;
-    prsci.lineWidth = 1.0f;
-    prsci.cullMode = VK_CULL_MODE_BACK_BIT;
-    prsci.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    prsci.depthBiasEnable = VK_FALSE;
-
-    pmsci.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    pmsci.sampleShadingEnable = VK_FALSE;
-    pmsci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    pcbas.colorWriteMask =
-	VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-	VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    pcbas.blendEnable = VK_FALSE;
 
     pcbsci.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     pcbsci.logicOpEnable = VK_FALSE;
@@ -942,10 +983,6 @@ creategraphicspipeline(void)
     pcbsci.blendConstants[2] = 0.0f;
     pcbsci.blendConstants[3] = 0.0f;
 
-    pdsci.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    pdsci.dynamicStateCount = COUNT(dynamicstates);
-    pdsci.pDynamicStates = dynamicstates;
-
     plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     plci.setLayoutCount = 0;
     plci.pushConstantRangeCount = 0;
@@ -955,7 +992,7 @@ creategraphicspipeline(void)
 
     gpci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     gpci.stageCount = 2;
-    gpci.pStages = shaderstagesci;
+    gpci.pStages = psscis;
     gpci.pVertexInputState = &pvisci;
     gpci.pInputAssemblyState = &piasci;
     gpci.pViewportState = &pvsci;
