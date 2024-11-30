@@ -852,10 +852,13 @@ createrenderpass(void)
 	.pPreserveAttachments = NULL
     };
     VkSubpassDependency dependency = {
+	/* Implicit subpass before render pass */
 	.srcSubpass = VK_SUBPASS_EXTERNAL,
 	.dstSubpass = 0,
+	/* Wait for swap chain to finish reading image */
 	.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 	.srcAccessMask = 0,
+	/* Writing the colour attachment needs to wait */
 	.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 	.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 	.dependencyFlags = 0
@@ -1232,7 +1235,8 @@ vk_drawframe(void)
     if (vkQueueSubmit(graphics, 1, &submitinfo, inflight) != VK_SUCCESS)
 	terminate("Failed to submit draw command buffer.");
 
-    vkQueuePresentKHR(present, &presentinfo);
+    if (vkQueuePresentKHR(present, &presentinfo) != VK_SUCCESS)
+	terminate("Faield to present frame.");
 }
 
 void
