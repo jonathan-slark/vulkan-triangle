@@ -3,19 +3,22 @@ Vulkan Triangle in C99 and Win32
 
 This project is an implementation of the [Vulkan Triangle official guide]
 (https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/00_Setup/00_Base_code.html)
-using C99 instead of C++ and Win32 instead of glfw. I hope to use this as the
-basis for a framework for games I will make in the future. It is a complete
-and commented example.
+using C99 instead of C++ and Win32 instead of glfw. It is a complete
+and commented example. I've implemented the program up to and including "Swap
+chain recreation" where the guide says you have a well-behaved Vulkan program.
+And yes, it is over 1200 lines of code to draw a triangle, but it is a very
+nice triangle!
 
 
 Why C99?
 --------
 
 I enjoy using a low-level and simple programming language that I can keep in
-my head without too much refering to documentation. I've followed the
+my head without much refering to documentation too often. I've followed the
 [suckless.org coding style](https://suckless.org/coding_style/) as I like the
-coding philosphy of keeping things simple. I decided to use designated
-initializers, from C99, for the structures as they are self-documenting.
+coding philosphy of keeping things simple. For the structures, I decided to
+use designated initializers, from C99, as they are self-documenting. I've used
+uint32_t in vulkan.c as it's what Vulkan uses for integer values.
 
 
 Why Win32?
@@ -30,7 +33,7 @@ MSYS2
 
 My development environment is MSYS2. I enjoy using a UNIX style programming
 environment as apposed to a full blown IDE. gcc has better support for plain C
-then MSVC and MSYS2 can produce native windows binaries without extra
+than MSVC and MSYS2 can produce native windows binaries without extra
 dependancies. There is a POSIX Makefile for building the program. Vulkan
 headers and libraries can be installed on MSYS2. I'm using glslc.exe that is
 included in the Vulkan SDK and can be run from within MSYS2.
