@@ -3,6 +3,8 @@
  * Drawing a triangle in Vulkan, rewritten for C99 and Win32.
  * TODO:
  * Better error checks.
+ * const usage.
+ * Check queryswapchainsupport() and freeswapchaindetails().
  */
 
 #include <assert.h>
@@ -88,6 +90,7 @@ static VkPresentModeKHR chooseswappresentmode(void);
 static VkExtent2D chooseswapextent(void);
 static void createswapchain(void);
 static void destroyswapchain(void);
+static void recreateswapchain(void);
 static void createimageviews(void);
 static void destroyimageviews(void);
 static void creategraphicspipeline(void);
@@ -148,6 +151,7 @@ static VkSemaphore imagesems[MAXFRAMES];
 static VkSemaphore rendersems[MAXFRAMES];
 static VkFence framefences[MAXFRAMES];
 static uint32_t currentframe = 0;
+static uint32_t framebufferresized = 0;
 
 /* Function implementations */
 
@@ -297,18 +301,17 @@ void
 vk_terminate(void)
 {
     devicewait();
-    destroysyncobjects();
-    destroycommandpool();
-    destroyframebuffers();
+    freeswapchaindetails();
+    destroyswapchain();
     destroygraphicspipeline();
     destroyrenderpass();
-    destroyimageviews();
-    destroyswapchain();
+    destroysyncobjects();
+    destroycommandpool();
     destroylogicaldevice();
-    destroysurface();
 #ifdef DEBUG
     destroydebugmessenger();
 #endif /* DEBUG */
+    destroysurface();
     destroyinstance();
 }
 
@@ -695,14 +698,13 @@ createswapchain(void)
     /* If queue families differ allow images to be used by different queues */
     if (qf.graphics != qf.present) {
 	ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-	ci.queueFamilyIndexCount = 2;
+	ci.queueFamilyIndexCount = COUNT(qfi);
 	ci.pQueueFamilyIndices = qfi;
     }
 
     if (vkCreateSwapchainKHR(device, &ci, NULL, &swapchain.handle) !=
 	    VK_SUCCESS)
 	terminate("Failed to create swap chain.");
-    freeswapchaindetails();
 
     /* Get the swap chain image handles */
     vkGetSwapchainImagesKHR(device, swapchain.handle, &imagecount, NULL);
@@ -718,8 +720,23 @@ createswapchain(void)
 void
 destroyswapchain(void)
 {
+    destroyframebuffers();
+    destroyimageviews();
     vkDestroySwapchainKHR(device, swapchain.handle, NULL);
     free(swapchain.images);
+}
+
+void
+recreateswapchain(void)
+{
+    devicewait();
+    destroyswapchain();
+
+    freeswapchaindetails();
+    queryswapchainsupport(physicaldevice, surface);
+    createswapchain();
+    createimageviews();
+    createframebuffers();
 }
 
 void
@@ -1196,6 +1213,7 @@ void
 vk_drawframe(void)
 {
     uint32_t imageindex, n = currentframe;
+    VkResult result;
     /* Don't write colours till image is available */
     VkSemaphore waitsems[] = { imagesems[n] };
     VkPipelineStageFlags waitstages[] = {
@@ -1227,10 +1245,24 @@ vk_drawframe(void)
     /* Wait for the previous frame to finish rendering. The fence is created in
      * the signaled state so the first call won't block. */
     vkWaitForFences(device, 1, &framefences[n], VK_TRUE, UINT64_MAX);
-    vkResetFences(device, 1, &framefences[n]);
 
-    vkAcquireNextImageKHR(device, swapchain.handle, UINT64_MAX, imagesems[n],
-	    VK_NULL_HANDLE, &imageindex);
+    result = vkAcquireNextImageKHR(device, swapchain.handle, UINT64_MAX,
+	    imagesems[n], VK_NULL_HANDLE, &imageindex);
+    /* Recreate the swap chain if it's out of date but continue if merely
+     * suboptimal. */
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+#ifdef DEBUG
+	fprintf(stderr, "%s\n",
+		"Recreating out of date swap chain after acquire image.");
+#endif /* DEBUG */
+	recreateswapchain();
+	return;
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+	terminate("Failed to acquire swap chain image.");
+    }
+
+    /* Don't reset the fence till we know we're submitting work */
+    vkResetFences(device, 1, &framefences[n]);
 
     vkResetCommandBuffer(commandbuffers[n], 0);
     recordcommandbuffer(commandbuffers[n], imageindex);
@@ -1238,8 +1270,24 @@ vk_drawframe(void)
     if (vkQueueSubmit(graphics, 1, &submitinfo, framefences[n]) != VK_SUCCESS)
 	terminate("Failed to submit draw command buffer.");
 
-    if (vkQueuePresentKHR(present, &presentinfo) != VK_SUCCESS)
-	terminate("Failed to present frame.");
+    result = vkQueuePresentKHR(present, &presentinfo);
+#ifdef DEBUG
+    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+	fprintf(stderr, "%s\n",
+		"Recreating out of date swap chain after present.");
+    if (result == VK_SUBOPTIMAL_KHR)
+	fprintf(stderr, "%s\n",
+		"Recreating sub optimal swap chain after present.");
+#endif /* DEBUG */
+    /* Recreate the swap chain if out of date, suboptimal or resized as we
+     * want the best possible image. */
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
+	    framebufferresized) {
+	framebufferresized = 0;
+	recreateswapchain();
+    } else if (result != VK_SUCCESS) {
+	terminate("Failed to present swap chain image.");
+    }
 
     currentframe = ++n % MAXFRAMES;
 }
@@ -1283,4 +1331,10 @@ void
 devicewait(void)
 {
     vkDeviceWaitIdle(device);
+}
+
+void
+vk_onresize(void)
+{
+    framebufferresized = 1;
 }

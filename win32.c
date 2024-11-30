@@ -25,8 +25,9 @@ WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	case SIZE_MINIMIZED:
 	    minimised = 1;
 	    break;
-	case SIZE_RESTORED:
+	default:
 	    minimised = 0;
+	    vk_onresize();
 	    break;
 	}
 	return 0;
@@ -66,7 +67,8 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShow
 
     RegisterClass(&wc);
     hwnd = CreateWindowEx(0, classname, appname,
-	    (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX),
+	    /*(WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX),*/
+	    WS_OVERLAPPEDWINDOW,
 	    CW_USEDEFAULT, CW_USEDEFAULT, appwidth, appheight, NULL, NULL,
 	    hInstance, NULL);
     if (hwnd == NULL)
