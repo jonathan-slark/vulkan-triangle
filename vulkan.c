@@ -1,10 +1,6 @@
 /* Based on:
  * https://docs.vulkan.org/tutorial/latest/03_Drawing_a_triangle/00_Setup/00_Base_code.html
  * Drawing a triangle in Vulkan, rewritten for C99 and Win32.
- * TODO:
- * Better error checks.
- * const usage.
- * Check queryswapchainsupport() and freeswapchaindetails().
  */
 
 #include <assert.h>
@@ -69,25 +65,25 @@ static void DestroyDebugUtilsMessengerEXT(
 	VkDebugUtilsMessengerEXT debugMessenger,
 	const VkAllocationCallbacks* pAllocator
 	);
-static void populatedebugci(VkDebugUtilsMessengerCreateInfoEXT *ci);
+static VkDebugUtilsMessengerCreateInfoEXT createdebugci(void);
 static void createdebugmessenger(void);
 static void destroydebugmessenger(void);
 #endif // DEBUG
 static void createinstance(void);
 static void destroyinstance(void);
-static QueueFamilies findqueuefamilies(VkPhysicalDevice pd);
-static uint32_t checkdeviceext(VkPhysicalDevice pd);
-static uint32_t isdevicesuitable(VkPhysicalDevice pd);
+static QueueFamilies findqueuefamilies(const VkPhysicalDevice pd);
+static uint32_t checkdeviceext(const VkPhysicalDevice pd);
+static uint32_t isdevicesuitable(const VkPhysicalDevice pd);
 static void pickphysicaldevice(void);
 static void createlogicaldevice(void);
 static void destroylogicaldevice(void);
 static void createsurface(void);
 static void destroysurface(void);
-static void queryswapchainsupport(VkPhysicalDevice pd, VkSurfaceKHR surface);
-static void freeswapchaindetails(void);
-static VkSurfaceFormatKHR chooseswapspaceformat(void);
-static VkPresentModeKHR chooseswappresentmode(void);
-static VkExtent2D chooseswapextent(void);
+static SwapChainDetails queryswapchaindetails(const VkPhysicalDevice pd);
+static void freeswapchaindetails(SwapChainDetails details);
+static VkSurfaceFormatKHR chooseswapsurfaceformat(const SwapChainDetails details);
+static VkPresentModeKHR chooseswappresentmode(const SwapChainDetails details);
+static VkExtent2D chooseswapextent(const SwapChainDetails details);
 static void createswapchain(void);
 static void destroyswapchain(void);
 static void recreateswapchain(void);
@@ -96,7 +92,7 @@ static void destroyimageviews(void);
 static void creategraphicspipeline(void);
 static char *createshadercode(const char *filename, size_t *size);
 static void deleteshadercode(char **code);
-static VkShaderModule createshadermodule(char *code, size_t size);
+static VkShaderModule createshadermodule(const char *code, size_t size);
 static void createrenderpass(void);
 static void destroyrenderpass(void);
 static void creategraphicspipeline(void);
@@ -108,17 +104,13 @@ static void destroycommandpool(void);
 static void createcommandpool(void);
 static void createcommandbuffers(void);
 static void recordcommandbuffer(VkCommandBuffer commandbuffers,
-	uint32_t imageindex);
+	const uint32_t imageindex);
 static void createsyncobjects(void);
 static void destroysyncobjects(void);
 static void devicewait(void);
 
 /* Variables */
-static const char *vertexshader   = "shaders/vertex.spv";
-static const char *fragmentshader = "shaders/fragment.spv";
 static const char *readonlybinary = "rb";
-static const char *shaderentry    = "main";
-static const uint32_t vertexcount = 3;
 #ifdef DEBUG
 static const char *layers[] = { "VK_LAYER_KHRONOS_validation" };
 static const char *exts[] = {
@@ -136,7 +128,6 @@ static const char *exts[] = {
 static const char *deviceexts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 static VkInstance instance;
 static VkPhysicalDevice physicaldevice = VK_NULL_HANDLE;
-static SwapChainDetails details;
 static VkDevice device;
 static VkQueue graphics;
 static VkQueue present;
@@ -217,7 +208,7 @@ CreateDebugUtilsMessengerEXT(
 	VkDebugUtilsMessengerEXT* pDebugMessenger
 	)
 {
-    PFN_vkCreateDebugUtilsMessengerEXT func =
+    const PFN_vkCreateDebugUtilsMessengerEXT func =
 	(PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance,
 		"vkCreateDebugUtilsMessengerEXT");
     if (func == NULL)
@@ -233,37 +224,40 @@ DestroyDebugUtilsMessengerEXT(
 	const VkAllocationCallbacks* pAllocator
 	)
 {
-    PFN_vkDestroyDebugUtilsMessengerEXT func =
+    const PFN_vkDestroyDebugUtilsMessengerEXT func =
 	(PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance,
 		"vkDestroyDebugUtilsMessengerEXT");
     if (func != NULL)
         func(instance, debugMessenger, pAllocator);
 }
 
-void
-populatedebugci(VkDebugUtilsMessengerCreateInfoEXT *ci) {
-    ci->sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    ci->pNext = NULL;
-    ci->flags = 0;
-    ci->messageSeverity =
-	/*VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-	VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |*/
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    ci->messageType =
-	VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    ci->pfnUserCallback = debugCallback;
-    ci->pUserData = NULL;
+VkDebugUtilsMessengerCreateInfoEXT
+createdebugci(void) {
+    VkDebugUtilsMessengerCreateInfoEXT ci = {
+	.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+	.pNext = NULL,
+	.flags = 0,
+	.messageSeverity =
+	    /*VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+	      VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |*/
+	    VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+	    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+	.messageType =
+	    VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+	    VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+	    VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+	.pfnUserCallback = debugCallback,
+	.pUserData = NULL
+    };
+
+    return ci;
 }
 
 void
 createdebugmessenger(void)
 {
-    VkDebugUtilsMessengerCreateInfoEXT ci;
+    const VkDebugUtilsMessengerCreateInfoEXT ci = createdebugci();
 
-    populatedebugci(&ci);
     if (CreateDebugUtilsMessengerEXT(instance, &ci, NULL, &debugmessenger) !=
 	    VK_SUCCESS)
 	terminate("Failed to set up debug messenger.");
@@ -301,7 +295,6 @@ void
 vk_terminate(void)
 {
     devicewait();
-    freeswapchaindetails();
     destroyswapchain();
     destroygraphicspipeline();
     destroyrenderpass();
@@ -318,7 +311,7 @@ vk_terminate(void)
 void
 createinstance(void)
 {
-    VkApplicationInfo ai = {
+    const VkApplicationInfo ai = {
 	.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
 	.pNext = NULL,
 	.pApplicationName = appname,
@@ -328,9 +321,9 @@ createinstance(void)
 	.apiVersion = VK_API_VERSION_1_0
     };
 #ifdef DEBUG
-    VkDebugUtilsMessengerCreateInfoEXT debugci;
+    const VkDebugUtilsMessengerCreateInfoEXT debugci = createdebugci();
 #endif /* DEBUG */
-    VkInstanceCreateInfo ci = {
+    const VkInstanceCreateInfo ci = {
 	.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
 #ifdef DEBUG
 	/* Main debug messenger doesn't exist in instance creation and
@@ -355,9 +348,8 @@ createinstance(void)
 #ifdef DEBUG
     if (!checklayersupport())
 	terminate("Validation layers requested, but not available.");
-
-    populatedebugci(&debugci);
 #endif /* DEBUG */
+
     if(vkCreateInstance(&ci, NULL, &instance) != VK_SUCCESS)
 	terminate("Failed to create instance.\n");
 }
@@ -369,7 +361,7 @@ destroyinstance(void)
 }
 
 QueueFamilies
-findqueuefamilies(VkPhysicalDevice pd)
+findqueuefamilies(const VkPhysicalDevice pd)
 {
     const uint32_t queuecount = 2;
     uint32_t qfpcount, i;
@@ -409,7 +401,7 @@ findqueuefamilies(VkPhysicalDevice pd)
 }
 
 uint32_t
-checkdeviceext(VkPhysicalDevice pd)
+checkdeviceext(const VkPhysicalDevice pd)
 {
     uint32_t availablecount, i, j, found;
     VkExtensionProperties *availableexts;
@@ -443,17 +435,19 @@ checkdeviceext(VkPhysicalDevice pd)
 }
 
 uint32_t
-isdevicesuitable(VkPhysicalDevice pd)
+isdevicesuitable(const VkPhysicalDevice pd)
 {
-    QueueFamilies qf = findqueuefamilies(pd);
-    uint32_t extssupport = checkdeviceext(pd);
+    const QueueFamilies qf = findqueuefamilies(pd);
+    SwapChainDetails details;
+    const uint32_t extssupport = checkdeviceext(pd);
     uint32_t swapchainadequate = 0;
 
     if (extssupport) {
-	queryswapchainsupport(pd, surface);
+	details = queryswapchaindetails(pd);
 	swapchainadequate =
 	    details.formats      != NULL &&
 	    details.presentmodes != NULL;
+	freeswapchaindetails(details);
     }
 
     return qf.isSuitable && extssupport && swapchainadequate;
@@ -489,13 +483,13 @@ void
 createlogicaldevice(void)
 {
     uint32_t i;
-    QueueFamilies qf = findqueuefamilies(physicaldevice);
+    const QueueFamilies qf = findqueuefamilies(physicaldevice);
     const float prio = 1.0f;
     VkDeviceQueueCreateInfo *dqcis = (VkDeviceQueueCreateInfo *)
 	malloc(qf.count * sizeof(VkDeviceQueueCreateInfo));
     /* Not specifying any physical device features */
     VkPhysicalDeviceFeatures pdf = { 0 };
-    VkDeviceCreateInfo dci = {
+    const VkDeviceCreateInfo dci = {
 	.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -542,7 +536,7 @@ destroylogicaldevice(void)
 void
 createsurface(void)
 {
-    VkWin32SurfaceCreateInfoKHR win32sci = {
+    const VkWin32SurfaceCreateInfoKHR win32sci = {
 	.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
 	.pNext = NULL,
 	.flags = 0,
@@ -561,9 +555,11 @@ destroysurface(void)
     vkDestroySurfaceKHR(instance, surface, NULL);
 }
 
-void
-queryswapchainsupport(VkPhysicalDevice pd, VkSurfaceKHR surface)
+SwapChainDetails
+queryswapchaindetails(const VkPhysicalDevice pd)
 {
+    SwapChainDetails details;
+
     /* Get basic surface capabilities */
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pd, surface,
 	    &details.capabilities);
@@ -587,17 +583,19 @@ queryswapchainsupport(VkPhysicalDevice pd, VkSurfaceKHR surface)
 	vkGetPhysicalDeviceSurfacePresentModesKHR(pd, surface,
 		&details.presentmodecount, details.presentmodes);
     }
+
+    return details;
 }
 
 void
-freeswapchaindetails(void)
+freeswapchaindetails(SwapChainDetails details)
 {
     free(details.formats);
     free(details.presentmodes);
 }
 
 VkSurfaceFormatKHR
-chooseswapspaceformat(void)
+chooseswapsurfaceformat(const SwapChainDetails details)
 {
     uint32_t i;
 
@@ -613,7 +611,7 @@ chooseswapspaceformat(void)
 }
 
 VkPresentModeKHR
-chooseswappresentmode(void)
+chooseswappresentmode(const SwapChainDetails details)
 {
     uint32_t i;
 
@@ -627,7 +625,7 @@ chooseswappresentmode(void)
 }
 
 VkExtent2D
-chooseswapextent(void)
+chooseswapextent(const SwapChainDetails details)
 {
     VkExtent2D extent;
     RECT rcClient;
@@ -639,17 +637,9 @@ chooseswapextent(void)
     /* Check if width and height don't match the resolution */
     if (details.capabilities.currentExtent.width == UINT32_MAX) {
 	GetClientRect(hwnd, &rcClient);
-	extent.width  = rcClient.right;
-	extent.height = rcClient.bottom;
-
-	if (extent.width < minwidth)
-	    extent.width = minwidth;
-	else if (extent.width > maxwidth)
-	    extent.width = maxwidth;
-	if (extent.height < minheight)
-	    extent.height = minheight;
-	else if (extent.height > maxheight)
-	    extent.height = maxheight;
+	extent.width  = CLAMP((uint32_t) rcClient.right, minwidth, maxwidth);
+	extent.height = CLAMP((uint32_t) rcClient.bottom, minheight,
+		maxheight);
 
 	return extent;
     } else {
@@ -660,10 +650,11 @@ chooseswapextent(void)
 void
 createswapchain(void)
 {
+    SwapChainDetails details = queryswapchaindetails(physicaldevice);
     uint32_t imagecount = details.capabilities.minImageCount + 1;
-    const VkSurfaceFormatKHR sf = chooseswapspaceformat();
-    const VkPresentModeKHR pm = chooseswappresentmode();
-    const VkExtent2D extent = chooseswapextent();
+    const VkSurfaceFormatKHR sf = chooseswapsurfaceformat(details);
+    const VkPresentModeKHR pm = chooseswappresentmode(details);
+    const VkExtent2D extent = chooseswapextent(details);
     const uint32_t maximagecount = details.capabilities.maxImageCount;
     const QueueFamilies qf = findqueuefamilies(physicaldevice);
     const uint32_t qfi[] = { qf.graphics, qf.present };
@@ -715,6 +706,7 @@ createswapchain(void)
 
     swapchain.imageformat = sf.format;
     swapchain.extent = extent;
+    freeswapchaindetails(details);
 }
 
 void
@@ -732,8 +724,6 @@ recreateswapchain(void)
     devicewait();
     destroyswapchain();
 
-    freeswapchaindetails();
-    queryswapchainsupport(physicaldevice, surface);
     createswapchain();
     createimageviews();
     createframebuffers();
@@ -817,9 +807,9 @@ deleteshadercode(char **code)
 }
 
 VkShaderModule
-createshadermodule(char *code, size_t size)
+createshadermodule(const char *code, size_t size)
 {
-    VkShaderModuleCreateInfo ci = {
+    const VkShaderModuleCreateInfo ci = {
 	.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -837,7 +827,7 @@ createshadermodule(char *code, size_t size)
 void
 createrenderpass(void)
 {
-    VkAttachmentDescription colorattachment = {
+    const VkAttachmentDescription colorattachment = {
 	.flags = 0,
 	.format = swapchain.imageformat,
 	.samples = VK_SAMPLE_COUNT_1_BIT,
@@ -852,11 +842,11 @@ createrenderpass(void)
 	.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
     };
     /* Single subpass as a colour buffer */
-    VkAttachmentReference colorattachmentref = {
+    const VkAttachmentReference colorattachmentref = {
 	.attachment = 0,
 	.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
-    VkSubpassDescription subpass = {
+    const VkSubpassDescription subpass = {
 	.flags = 0,
 	/* Graphics subpass, not compute */
 	.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -869,7 +859,7 @@ createrenderpass(void)
 	.preserveAttachmentCount = 0,
 	.pPreserveAttachments = NULL
     };
-    VkSubpassDependency dependency = {
+    const VkSubpassDependency dependency = {
 	/* Implicit subpass before render pass */
 	.srcSubpass = VK_SUBPASS_EXTERNAL,
 	.dstSubpass = 0,
@@ -881,7 +871,7 @@ createrenderpass(void)
 	.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 	.dependencyFlags = 0
     };
-    VkRenderPassCreateInfo rpci = {
+    const VkRenderPassCreateInfo rpci = {
 	.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -909,10 +899,10 @@ creategraphicspipeline(void)
     size_t vertexcodesize, fragmentcodesize;
     char *vertexcode = createshadercode(vertexshader, &vertexcodesize);
     char *fragmentcode = createshadercode(fragmentshader, &fragmentcodesize);
-    VkShaderModule vertexsm = createshadermodule(vertexcode, vertexcodesize);
-    VkShaderModule fragmentsm = createshadermodule(fragmentcode,
+    const VkShaderModule vertexsm = createshadermodule(vertexcode, vertexcodesize);
+    const VkShaderModule fragmentsm = createshadermodule(fragmentcode,
 	    fragmentcodesize);
-    VkPipelineShaderStageCreateInfo vertexpssci = {
+    const VkPipelineShaderStageCreateInfo vertexpssci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -921,7 +911,7 @@ creategraphicspipeline(void)
 	.pName = shaderentry,
 	.pSpecializationInfo = NULL
     };
-    VkPipelineShaderStageCreateInfo fragmentpssci = {
+    const VkPipelineShaderStageCreateInfo fragmentpssci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -930,12 +920,12 @@ creategraphicspipeline(void)
 	.pName = shaderentry,
 	.pSpecializationInfo = NULL
     };
-    VkPipelineShaderStageCreateInfo psscis[] = {
+    const VkPipelineShaderStageCreateInfo psscis[] = {
 	vertexpssci,
 	fragmentpssci
     };
     /* No vertex data to load */
-    VkPipelineVertexInputStateCreateInfo pvisci = {
+    const VkPipelineVertexInputStateCreateInfo pvisci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -944,7 +934,7 @@ creategraphicspipeline(void)
 	.vertexAttributeDescriptionCount = 0,
 	.pVertexAttributeDescriptions = NULL
     };
-    VkPipelineInputAssemblyStateCreateInfo piasci = {
+    const VkPipelineInputAssemblyStateCreateInfo piasci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -952,18 +942,18 @@ creategraphicspipeline(void)
 	.primitiveRestartEnable = VK_FALSE
     };
     /* Viewport and scissor state will be specified at drawing time */
-    VkDynamicState dynamicstates[] = {
+    const VkDynamicState dynamicstates[] = {
 	VK_DYNAMIC_STATE_VIEWPORT,
 	VK_DYNAMIC_STATE_SCISSOR
     };
-    VkPipelineDynamicStateCreateInfo pdsci = { 
+    const VkPipelineDynamicStateCreateInfo pdsci = { 
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
 	.dynamicStateCount = COUNT(dynamicstates),
 	.pDynamicStates = dynamicstates
     };
-    VkPipelineViewportStateCreateInfo pvsci = {
+    const VkPipelineViewportStateCreateInfo pvsci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -972,7 +962,7 @@ creategraphicspipeline(void)
 	.scissorCount = 1,
 	.pScissors = NULL
     };
-    VkPipelineRasterizationStateCreateInfo prsci = {
+    const VkPipelineRasterizationStateCreateInfo prsci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -991,7 +981,7 @@ creategraphicspipeline(void)
 	.lineWidth = 1.0f
     };
     /* Disable multisampling */
-    VkPipelineMultisampleStateCreateInfo pmsci = {
+    const VkPipelineMultisampleStateCreateInfo pmsci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -1003,7 +993,7 @@ creategraphicspipeline(void)
 	.alphaToOneEnable = VK_FALSE
     };
     /* Disable colour blending */
-    VkPipelineColorBlendAttachmentState pcbas = {
+    const VkPipelineColorBlendAttachmentState pcbas = {
 	.blendEnable = VK_FALSE,
 	.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
 	.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
@@ -1015,7 +1005,7 @@ creategraphicspipeline(void)
 	    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
 	    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
     };
-    VkPipelineColorBlendStateCreateInfo pcbsci = {
+    const VkPipelineColorBlendStateCreateInfo pcbsci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -1028,7 +1018,7 @@ creategraphicspipeline(void)
 	.blendConstants[2] = 0.0f,
 	.blendConstants[3] = 0.0f
     };
-    VkPipelineLayoutCreateInfo plci = {
+    const VkPipelineLayoutCreateInfo plci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -1123,8 +1113,8 @@ destroyframebuffers(void)
 void
 createcommandpool(void)
 {
-    QueueFamilies qf = findqueuefamilies(physicaldevice);
-    VkCommandPoolCreateInfo cpci = {
+    const QueueFamilies qf = findqueuefamilies(physicaldevice);
+    const VkCommandPoolCreateInfo cpci = {
 	.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 	.pNext = NULL,
 	/* Recording a command buffer every frame */
@@ -1145,7 +1135,7 @@ destroycommandpool(void)
 void
 createcommandbuffers(void)
 {
-    VkCommandBufferAllocateInfo cbai = {
+    const VkCommandBufferAllocateInfo cbai = {
 	.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 	.pNext = NULL,
 	.commandPool = commandpool,
@@ -1159,17 +1149,17 @@ createcommandbuffers(void)
 }
 
 void
-recordcommandbuffer(VkCommandBuffer commandbuffers, uint32_t imageindex)
+recordcommandbuffer(VkCommandBuffer commandbuffers, const uint32_t imageindex)
 {
-    VkCommandBufferBeginInfo cbbi = {
+    const VkCommandBufferBeginInfo cbbi = {
 	.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 	.pNext = NULL,
 	.flags = 0,
 	.pInheritanceInfo = NULL
     };
     /* Three levels of braces: clearcolour.color.float32 */
-    VkClearValue clearcolour = {{{ 0.0f, 0.0f, 0.0f, 1.0f }}};
-    VkRenderPassBeginInfo rpbi = {
+    const VkClearValue clearcolour = {{{ 0.0f, 0.0f, 0.0f, 1.0f }}};
+    const VkRenderPassBeginInfo rpbi = {
 	.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
 	.pNext = NULL,
 	.renderPass = renderpass,
@@ -1179,7 +1169,7 @@ recordcommandbuffer(VkCommandBuffer commandbuffers, uint32_t imageindex)
 	.clearValueCount = 1,
 	.pClearValues = &clearcolour
     };
-    VkViewport viewport = {
+    const VkViewport viewport = {
 	.x = 0.0f,
 	.y = 0.0f,
 	.width = (float) swapchain.extent.width,
@@ -1187,7 +1177,7 @@ recordcommandbuffer(VkCommandBuffer commandbuffers, uint32_t imageindex)
 	.minDepth = 0.0f,
 	.maxDepth = 1.0f
     };
-    VkRect2D scissor = {
+    const VkRect2D scissor = {
 	.offset = { 0, 0 },
 	.extent = swapchain.extent
     };
@@ -1215,11 +1205,11 @@ vk_drawframe(void)
     uint32_t imageindex, n = currentframe;
     VkResult result;
     /* Don't write colours till image is available */
-    VkSemaphore waitsems[] = { imagesems[n] };
-    VkPipelineStageFlags waitstages[] = {
+    const VkSemaphore waitsems[] = { imagesems[n] };
+    const VkPipelineStageFlags waitstages[] = {
 	VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-    VkSemaphore signalsems[] = { rendersems[n] };
-    VkSubmitInfo submitinfo = {
+    const VkSemaphore signalsems[] = { rendersems[n] };
+    const VkSubmitInfo submitinfo = {
 	.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 	.pNext = NULL,
 	.waitSemaphoreCount = 1,
@@ -1230,8 +1220,8 @@ vk_drawframe(void)
 	.signalSemaphoreCount = 1,
 	.pSignalSemaphores = signalsems
     };
-    VkSwapchainKHR swapchains[] = { swapchain.handle };
-    VkPresentInfoKHR presentinfo = {
+    const VkSwapchainKHR swapchains[] = { swapchain.handle };
+    const VkPresentInfoKHR presentinfo = {
 	.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 	.pNext = NULL,
 	.waitSemaphoreCount = 1,
@@ -1251,10 +1241,6 @@ vk_drawframe(void)
     /* Recreate the swap chain if it's out of date but continue if merely
      * suboptimal. */
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-#ifdef DEBUG
-	fprintf(stderr, "%s\n",
-		"Recreating out of date swap chain after acquire image.");
-#endif /* DEBUG */
 	recreateswapchain();
 	return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
@@ -1271,14 +1257,6 @@ vk_drawframe(void)
 	terminate("Failed to submit draw command buffer.");
 
     result = vkQueuePresentKHR(present, &presentinfo);
-#ifdef DEBUG
-    if (result == VK_ERROR_OUT_OF_DATE_KHR)
-	fprintf(stderr, "%s\n",
-		"Recreating out of date swap chain after present.");
-    if (result == VK_SUBOPTIMAL_KHR)
-	fprintf(stderr, "%s\n",
-		"Recreating sub optimal swap chain after present.");
-#endif /* DEBUG */
     /* Recreate the swap chain if out of date, suboptimal or resized as we
      * want the best possible image. */
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
@@ -1296,13 +1274,12 @@ void
 createsyncobjects(void)
 {
     uint32_t i;
-
-    VkSemaphoreCreateInfo sci = {
+    const VkSemaphoreCreateInfo sci = {
 	.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0
     };
-    VkFenceCreateInfo fci = {
+    const VkFenceCreateInfo fci = {
 	.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = VK_FENCE_CREATE_SIGNALED_BIT

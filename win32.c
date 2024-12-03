@@ -66,9 +66,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShow
     };
 
     RegisterClass(&wc);
-    hwnd = CreateWindowEx(0, classname, appname,
-	    /*(WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX),*/
-	    WS_OVERLAPPEDWINDOW,
+    hwnd = CreateWindowEx(0, classname, appname, WS_OVERLAPPEDWINDOW,
 	    CW_USEDEFAULT, CW_USEDEFAULT, appwidth, appheight, NULL, NULL,
 	    hInstance, NULL);
     if (hwnd == NULL)
