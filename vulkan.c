@@ -71,19 +71,19 @@ static void destroydebugmessenger(void);
 #endif // DEBUG
 static void createinstance(void);
 static void destroyinstance(void);
-static QueueFamilies findqueuefamilies(const VkPhysicalDevice pd);
-static uint32_t checkdeviceext(const VkPhysicalDevice pd);
-static uint32_t isdevicesuitable(const VkPhysicalDevice pd);
+static QueueFamilies findqueuefamilies(VkPhysicalDevice pd);
+static uint32_t checkdeviceext(VkPhysicalDevice pd);
+static uint32_t isdevicesuitable(VkPhysicalDevice pd);
 static void pickphysicaldevice(void);
 static void createlogicaldevice(void);
 static void destroylogicaldevice(void);
 static void createsurface(void);
 static void destroysurface(void);
-static SwapChainDetails queryswapchaindetails(const VkPhysicalDevice pd);
+static SwapChainDetails queryswapchaindetails(VkPhysicalDevice pd);
 static void freeswapchaindetails(SwapChainDetails details);
-static VkSurfaceFormatKHR chooseswapsurfaceformat(const SwapChainDetails details);
-static VkPresentModeKHR chooseswappresentmode(const SwapChainDetails details);
-static VkExtent2D chooseswapextent(const SwapChainDetails details);
+static VkSurfaceFormatKHR chooseswapsurfaceformat(SwapChainDetails details);
+static VkPresentModeKHR chooseswappresentmode(SwapChainDetails details);
+static VkExtent2D chooseswapextent(SwapChainDetails details);
 static void createswapchain(void);
 static void destroyswapchain(void);
 static void recreateswapchain(void);
@@ -104,28 +104,29 @@ static void destroycommandpool(void);
 static void createcommandpool(void);
 static void createcommandbuffers(void);
 static void recordcommandbuffer(VkCommandBuffer commandbuffers,
-	const uint32_t imageindex);
+	uint32_t imageindex);
 static void createsyncobjects(void);
 static void destroysyncobjects(void);
 static void devicewait(void);
 
 /* Variables */
-static const char *readonlybinary = "rb";
+static const char readonlybinary[] = "rb";
+static const uint32_t queuecount = 2;
 #ifdef DEBUG
-static const char *layers[] = { "VK_LAYER_KHRONOS_validation" };
-static const char *exts[] = {
+static const char * const layers[] = { "VK_LAYER_KHRONOS_validation" };
+static const char * const exts[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
     VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
     VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 };
 VkDebugUtilsMessengerEXT debugmessenger;
 #else
-static const char *exts[] = {
+static const char * const exts[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
     VK_KHR_WIN32_SURFACE_EXTENSION_NAME
 };
 #endif /* DEBUG */
-static const char *deviceexts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+static const char * const deviceexts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 static VkInstance instance;
 static VkPhysicalDevice physicaldevice = VK_NULL_HANDLE;
 static VkDevice device;
@@ -208,7 +209,7 @@ CreateDebugUtilsMessengerEXT(
 	VkDebugUtilsMessengerEXT* pDebugMessenger
 	)
 {
-    const PFN_vkCreateDebugUtilsMessengerEXT func =
+    PFN_vkCreateDebugUtilsMessengerEXT func =
 	(PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance,
 		"vkCreateDebugUtilsMessengerEXT");
     if (func == NULL)
@@ -224,7 +225,7 @@ DestroyDebugUtilsMessengerEXT(
 	const VkAllocationCallbacks* pAllocator
 	)
 {
-    const PFN_vkDestroyDebugUtilsMessengerEXT func =
+    PFN_vkDestroyDebugUtilsMessengerEXT func =
 	(PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance,
 		"vkDestroyDebugUtilsMessengerEXT");
     if (func != NULL)
@@ -256,7 +257,7 @@ createdebugci(void) {
 void
 createdebugmessenger(void)
 {
-    const VkDebugUtilsMessengerCreateInfoEXT ci = createdebugci();
+    VkDebugUtilsMessengerCreateInfoEXT ci = createdebugci();
 
     if (CreateDebugUtilsMessengerEXT(instance, &ci, NULL, &debugmessenger) !=
 	    VK_SUCCESS)
@@ -311,7 +312,7 @@ vk_terminate(void)
 void
 createinstance(void)
 {
-    const VkApplicationInfo ai = {
+    VkApplicationInfo ai = {
 	.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
 	.pNext = NULL,
 	.pApplicationName = appname,
@@ -321,9 +322,9 @@ createinstance(void)
 	.apiVersion = VK_API_VERSION_1_0
     };
 #ifdef DEBUG
-    const VkDebugUtilsMessengerCreateInfoEXT debugci = createdebugci();
+    VkDebugUtilsMessengerCreateInfoEXT debugci = createdebugci();
 #endif /* DEBUG */
-    const VkInstanceCreateInfo ci = {
+    VkInstanceCreateInfo ci = {
 	.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
 #ifdef DEBUG
 	/* Main debug messenger doesn't exist in instance creation and
@@ -361,9 +362,8 @@ destroyinstance(void)
 }
 
 QueueFamilies
-findqueuefamilies(const VkPhysicalDevice pd)
+findqueuefamilies(VkPhysicalDevice pd)
 {
-    const uint32_t queuecount = 2;
     uint32_t qfpcount, i;
     QueueFamilies qf = { 0 };
     VkQueueFamilyProperties *qfps;
@@ -401,7 +401,7 @@ findqueuefamilies(const VkPhysicalDevice pd)
 }
 
 uint32_t
-checkdeviceext(const VkPhysicalDevice pd)
+checkdeviceext(VkPhysicalDevice pd)
 {
     uint32_t availablecount, i, j, found;
     VkExtensionProperties *availableexts;
@@ -435,11 +435,11 @@ checkdeviceext(const VkPhysicalDevice pd)
 }
 
 uint32_t
-isdevicesuitable(const VkPhysicalDevice pd)
+isdevicesuitable(VkPhysicalDevice pd)
 {
-    const QueueFamilies qf = findqueuefamilies(pd);
+    QueueFamilies qf = findqueuefamilies(pd);
     SwapChainDetails details;
-    const uint32_t extssupport = checkdeviceext(pd);
+    uint32_t extssupport = checkdeviceext(pd);
     uint32_t swapchainadequate = 0;
 
     if (extssupport) {
@@ -483,13 +483,13 @@ void
 createlogicaldevice(void)
 {
     uint32_t i;
-    const QueueFamilies qf = findqueuefamilies(physicaldevice);
-    const float prio = 1.0f;
+    QueueFamilies qf = findqueuefamilies(physicaldevice);
+    float prio = 1.0f;
     VkDeviceQueueCreateInfo *dqcis = (VkDeviceQueueCreateInfo *)
 	malloc(qf.count * sizeof(VkDeviceQueueCreateInfo));
     /* Not specifying any physical device features */
     VkPhysicalDeviceFeatures pdf = { 0 };
-    const VkDeviceCreateInfo dci = {
+    VkDeviceCreateInfo dci = {
 	.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -536,7 +536,7 @@ destroylogicaldevice(void)
 void
 createsurface(void)
 {
-    const VkWin32SurfaceCreateInfoKHR win32sci = {
+    VkWin32SurfaceCreateInfoKHR win32sci = {
 	.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
 	.pNext = NULL,
 	.flags = 0,
@@ -556,7 +556,7 @@ destroysurface(void)
 }
 
 SwapChainDetails
-queryswapchaindetails(const VkPhysicalDevice pd)
+queryswapchaindetails(VkPhysicalDevice pd)
 {
     SwapChainDetails details;
 
@@ -595,7 +595,7 @@ freeswapchaindetails(SwapChainDetails details)
 }
 
 VkSurfaceFormatKHR
-chooseswapsurfaceformat(const SwapChainDetails details)
+chooseswapsurfaceformat(SwapChainDetails details)
 {
     uint32_t i;
 
@@ -611,7 +611,7 @@ chooseswapsurfaceformat(const SwapChainDetails details)
 }
 
 VkPresentModeKHR
-chooseswappresentmode(const SwapChainDetails details)
+chooseswappresentmode(SwapChainDetails details)
 {
     uint32_t i;
 
@@ -625,14 +625,14 @@ chooseswappresentmode(const SwapChainDetails details)
 }
 
 VkExtent2D
-chooseswapextent(const SwapChainDetails details)
+chooseswapextent(SwapChainDetails details)
 {
     VkExtent2D extent;
     RECT rcClient;
-    const uint32_t minwidth  = details.capabilities.minImageExtent.width;
-    const uint32_t maxwidth  = details.capabilities.maxImageExtent.width;
-    const uint32_t minheight = details.capabilities.minImageExtent.height;
-    const uint32_t maxheight = details.capabilities.maxImageExtent.height;
+    uint32_t minwidth  = details.capabilities.minImageExtent.width;
+    uint32_t maxwidth  = details.capabilities.maxImageExtent.width;
+    uint32_t minheight = details.capabilities.minImageExtent.height;
+    uint32_t maxheight = details.capabilities.maxImageExtent.height;
 
     /* Check if width and height don't match the resolution */
     if (details.capabilities.currentExtent.width == UINT32_MAX) {
@@ -652,12 +652,12 @@ createswapchain(void)
 {
     SwapChainDetails details = queryswapchaindetails(physicaldevice);
     uint32_t imagecount = details.capabilities.minImageCount + 1;
-    const VkSurfaceFormatKHR sf = chooseswapsurfaceformat(details);
-    const VkPresentModeKHR pm = chooseswappresentmode(details);
-    const VkExtent2D extent = chooseswapextent(details);
-    const uint32_t maximagecount = details.capabilities.maxImageCount;
-    const QueueFamilies qf = findqueuefamilies(physicaldevice);
-    const uint32_t qfi[] = { qf.graphics, qf.present };
+    VkSurfaceFormatKHR sf = chooseswapsurfaceformat(details);
+    VkPresentModeKHR pm = chooseswappresentmode(details);
+    VkExtent2D extent = chooseswapextent(details);
+    uint32_t maximagecount = details.capabilities.maxImageCount;
+    QueueFamilies qf = findqueuefamilies(physicaldevice);
+    uint32_t qfi[] = { qf.graphics, qf.present };
     VkSwapchainCreateInfoKHR ci = {
 	.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
 	.pNext = NULL,
@@ -809,7 +809,7 @@ deleteshadercode(char **code)
 VkShaderModule
 createshadermodule(const char *code, size_t size)
 {
-    const VkShaderModuleCreateInfo ci = {
+    VkShaderModuleCreateInfo ci = {
 	.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -827,7 +827,7 @@ createshadermodule(const char *code, size_t size)
 void
 createrenderpass(void)
 {
-    const VkAttachmentDescription colorattachment = {
+    VkAttachmentDescription colorattachment = {
 	.flags = 0,
 	.format = swapchain.imageformat,
 	.samples = VK_SAMPLE_COUNT_1_BIT,
@@ -842,11 +842,11 @@ createrenderpass(void)
 	.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
     };
     /* Single subpass as a colour buffer */
-    const VkAttachmentReference colorattachmentref = {
+    VkAttachmentReference colorattachmentref = {
 	.attachment = 0,
 	.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
-    const VkSubpassDescription subpass = {
+    VkSubpassDescription subpass = {
 	.flags = 0,
 	/* Graphics subpass, not compute */
 	.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -859,7 +859,7 @@ createrenderpass(void)
 	.preserveAttachmentCount = 0,
 	.pPreserveAttachments = NULL
     };
-    const VkSubpassDependency dependency = {
+    VkSubpassDependency dependency = {
 	/* Implicit subpass before render pass */
 	.srcSubpass = VK_SUBPASS_EXTERNAL,
 	.dstSubpass = 0,
@@ -871,7 +871,7 @@ createrenderpass(void)
 	.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 	.dependencyFlags = 0
     };
-    const VkRenderPassCreateInfo rpci = {
+    VkRenderPassCreateInfo rpci = {
 	.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -899,10 +899,10 @@ creategraphicspipeline(void)
     size_t vertexcodesize, fragmentcodesize;
     char *vertexcode = createshadercode(vertexshader, &vertexcodesize);
     char *fragmentcode = createshadercode(fragmentshader, &fragmentcodesize);
-    const VkShaderModule vertexsm = createshadermodule(vertexcode, vertexcodesize);
-    const VkShaderModule fragmentsm = createshadermodule(fragmentcode,
+    VkShaderModule vertexsm = createshadermodule(vertexcode, vertexcodesize);
+    VkShaderModule fragmentsm = createshadermodule(fragmentcode,
 	    fragmentcodesize);
-    const VkPipelineShaderStageCreateInfo vertexpssci = {
+    VkPipelineShaderStageCreateInfo vertexpssci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -911,7 +911,7 @@ creategraphicspipeline(void)
 	.pName = shaderentry,
 	.pSpecializationInfo = NULL
     };
-    const VkPipelineShaderStageCreateInfo fragmentpssci = {
+    VkPipelineShaderStageCreateInfo fragmentpssci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -920,12 +920,12 @@ creategraphicspipeline(void)
 	.pName = shaderentry,
 	.pSpecializationInfo = NULL
     };
-    const VkPipelineShaderStageCreateInfo psscis[] = {
+    VkPipelineShaderStageCreateInfo psscis[] = {
 	vertexpssci,
 	fragmentpssci
     };
     /* No vertex data to load */
-    const VkPipelineVertexInputStateCreateInfo pvisci = {
+    VkPipelineVertexInputStateCreateInfo pvisci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -934,7 +934,7 @@ creategraphicspipeline(void)
 	.vertexAttributeDescriptionCount = 0,
 	.pVertexAttributeDescriptions = NULL
     };
-    const VkPipelineInputAssemblyStateCreateInfo piasci = {
+    VkPipelineInputAssemblyStateCreateInfo piasci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -942,18 +942,18 @@ creategraphicspipeline(void)
 	.primitiveRestartEnable = VK_FALSE
     };
     /* Viewport and scissor state will be specified at drawing time */
-    const VkDynamicState dynamicstates[] = {
+    VkDynamicState dynamicstates[] = {
 	VK_DYNAMIC_STATE_VIEWPORT,
 	VK_DYNAMIC_STATE_SCISSOR
     };
-    const VkPipelineDynamicStateCreateInfo pdsci = { 
+    VkPipelineDynamicStateCreateInfo pdsci = { 
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
 	.dynamicStateCount = COUNT(dynamicstates),
 	.pDynamicStates = dynamicstates
     };
-    const VkPipelineViewportStateCreateInfo pvsci = {
+    VkPipelineViewportStateCreateInfo pvsci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -962,7 +962,7 @@ creategraphicspipeline(void)
 	.scissorCount = 1,
 	.pScissors = NULL
     };
-    const VkPipelineRasterizationStateCreateInfo prsci = {
+    VkPipelineRasterizationStateCreateInfo prsci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -981,7 +981,7 @@ creategraphicspipeline(void)
 	.lineWidth = 1.0f
     };
     /* Disable multisampling */
-    const VkPipelineMultisampleStateCreateInfo pmsci = {
+    VkPipelineMultisampleStateCreateInfo pmsci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -993,7 +993,7 @@ creategraphicspipeline(void)
 	.alphaToOneEnable = VK_FALSE
     };
     /* Disable colour blending */
-    const VkPipelineColorBlendAttachmentState pcbas = {
+    VkPipelineColorBlendAttachmentState pcbas = {
 	.blendEnable = VK_FALSE,
 	.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
 	.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
@@ -1005,7 +1005,7 @@ creategraphicspipeline(void)
 	    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
 	    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
     };
-    const VkPipelineColorBlendStateCreateInfo pcbsci = {
+    VkPipelineColorBlendStateCreateInfo pcbsci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -1018,7 +1018,7 @@ creategraphicspipeline(void)
 	.blendConstants[2] = 0.0f,
 	.blendConstants[3] = 0.0f
     };
-    const VkPipelineLayoutCreateInfo plci = {
+    VkPipelineLayoutCreateInfo plci = {
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0,
@@ -1113,8 +1113,8 @@ destroyframebuffers(void)
 void
 createcommandpool(void)
 {
-    const QueueFamilies qf = findqueuefamilies(physicaldevice);
-    const VkCommandPoolCreateInfo cpci = {
+    QueueFamilies qf = findqueuefamilies(physicaldevice);
+    VkCommandPoolCreateInfo cpci = {
 	.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 	.pNext = NULL,
 	/* Recording a command buffer every frame */
@@ -1135,7 +1135,7 @@ destroycommandpool(void)
 void
 createcommandbuffers(void)
 {
-    const VkCommandBufferAllocateInfo cbai = {
+    VkCommandBufferAllocateInfo cbai = {
 	.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 	.pNext = NULL,
 	.commandPool = commandpool,
@@ -1149,17 +1149,17 @@ createcommandbuffers(void)
 }
 
 void
-recordcommandbuffer(VkCommandBuffer commandbuffers, const uint32_t imageindex)
+recordcommandbuffer(VkCommandBuffer commandbuffers, uint32_t imageindex)
 {
-    const VkCommandBufferBeginInfo cbbi = {
+    VkCommandBufferBeginInfo cbbi = {
 	.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 	.pNext = NULL,
 	.flags = 0,
 	.pInheritanceInfo = NULL
     };
     /* Three levels of braces: clearcolour.color.float32 */
-    const VkClearValue clearcolour = {{{ 0.0f, 0.0f, 0.0f, 1.0f }}};
-    const VkRenderPassBeginInfo rpbi = {
+    VkClearValue clearcolour = {{{ 0.0f, 0.0f, 0.0f, 1.0f }}};
+    VkRenderPassBeginInfo rpbi = {
 	.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
 	.pNext = NULL,
 	.renderPass = renderpass,
@@ -1169,7 +1169,7 @@ recordcommandbuffer(VkCommandBuffer commandbuffers, const uint32_t imageindex)
 	.clearValueCount = 1,
 	.pClearValues = &clearcolour
     };
-    const VkViewport viewport = {
+    VkViewport viewport = {
 	.x = 0.0f,
 	.y = 0.0f,
 	.width = (float) swapchain.extent.width,
@@ -1177,7 +1177,7 @@ recordcommandbuffer(VkCommandBuffer commandbuffers, const uint32_t imageindex)
 	.minDepth = 0.0f,
 	.maxDepth = 1.0f
     };
-    const VkRect2D scissor = {
+    VkRect2D scissor = {
 	.offset = { 0, 0 },
 	.extent = swapchain.extent
     };
@@ -1205,11 +1205,11 @@ vk_drawframe(void)
     uint32_t imageindex, n = currentframe;
     VkResult result;
     /* Don't write colours till image is available */
-    const VkSemaphore waitsems[] = { imagesems[n] };
-    const VkPipelineStageFlags waitstages[] = {
+    VkSemaphore waitsems[] = { imagesems[n] };
+    VkPipelineStageFlags waitstages[] = {
 	VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-    const VkSemaphore signalsems[] = { rendersems[n] };
-    const VkSubmitInfo submitinfo = {
+    VkSemaphore signalsems[] = { rendersems[n] };
+    VkSubmitInfo submitinfo = {
 	.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 	.pNext = NULL,
 	.waitSemaphoreCount = 1,
@@ -1220,8 +1220,8 @@ vk_drawframe(void)
 	.signalSemaphoreCount = 1,
 	.pSignalSemaphores = signalsems
     };
-    const VkSwapchainKHR swapchains[] = { swapchain.handle };
-    const VkPresentInfoKHR presentinfo = {
+    VkSwapchainKHR swapchains[] = { swapchain.handle };
+    VkPresentInfoKHR presentinfo = {
 	.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 	.pNext = NULL,
 	.waitSemaphoreCount = 1,
@@ -1274,12 +1274,12 @@ void
 createsyncobjects(void)
 {
     uint32_t i;
-    const VkSemaphoreCreateInfo sci = {
+    VkSemaphoreCreateInfo sci = {
 	.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = 0
     };
-    const VkFenceCreateInfo fci = {
+    VkFenceCreateInfo fci = {
 	.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 	.pNext = NULL,
 	.flags = VK_FENCE_CREATE_SIGNALED_BIT

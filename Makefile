@@ -26,7 +26,7 @@ $(BIN): $(OBJ)
 %.spv: %.glsl
 	$(GLSLC) $< -o $@
 
-vulkan.c win32.c: config.h util.h vulkan.h win32.h
+vulkan.o win32.o: config.h util.h vulkan.h win32.h
 
 clean:
 	@rm -f $(BIN) $(OBJ) $(SPV)
