@@ -1,6 +1,5 @@
-.dep
-.*.swp
-*~
+.codebuddy
+.vscode
 *.exe
 *.o
 *.spv
