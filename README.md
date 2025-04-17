@@ -8,19 +8,9 @@ A minimalist implementation of the [Vulkan Triangle tutorial](https://docs.vulka
 
 This project implements the Vulkan tutorial up to and including "Swap chain recreation", resulting in a fully functional Vulkan program. While it may seem complex (over 1200 lines) for drawing a triangle, it demonstrates proper Vulkan initialization and rendering setup.
 
-## Design Choices
+## Goal
 
-### Why C99?
-
-I enjoy using a low-level and simple programming language that I can keep in my head without much referring to documentation too often. I've followed the [suckless.org coding style](https://suckless.org/coding_style/) as I like the coding philosophy of keeping things simple. For the structures, I decided to use designated initializers, from C99, as they are self-documenting. I've used uint32_t in vulkan.c as it's what Vulkan uses for integer values.
-
-### Why Win32?
-
-I want to keep library dependencies to a minimum and have control over the working details of the operating system.
-
-## MSYS2
-
-My development environment is MSYS2. I enjoy using a UNIX style programming environment as opposed to a full-blown IDE. gcc has better support for plain C than MSVC and MSYS2 can produce native windows binaries without extra dependencies. There is a POSIX Makefile for building the program. Vulkan headers and libraries can be installed on MSYS2. I'm using glslc.exe that is included in the Vulkan SDK and can be run from within MSYS2.
+The primary aim of this project is to evaluate Vulkan's suitability for solo-developed game projects, emphasizing low-level control with minimal external dependencies. I have chosen C99 over C++ and Win32 over GLFW, utilizing MSYS2 as the build environment. This choice reflects my preference for procedural programming and simplicity in language design, which I find advantageous over C++'s enforced object-oriented paradigm. Additionally, due to limited support for C99 in Visual Studio, MSYS2 provides an optimal Linux-style build environment on Windows platforms.
 
 ## Postmortem
 
