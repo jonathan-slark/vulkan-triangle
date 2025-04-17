@@ -18,9 +18,7 @@ Adopting C99 has proven to be a solid choice, especially for desktop games that 
 
 One notable challenge with Vulkan is its requirement for a deep understanding of the graphics pipeline. For developers whose primary focus isn’t on graphics programming—or for those building game engines—using a higher-level API like OpenGL might be more appropriate. Even though OpenGL is considered deprecated by some, and Vulkan is designed for modern GPUs and multi-threaded CPUs, both have their merits and will likely coexist for the foreseeable future.
 
-## Building the Project
-
-### Prerequisites
+## Building
 
 The following MSYS2 packages are required:
 - make
